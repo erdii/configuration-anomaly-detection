@@ -10,6 +10,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
+	"github.com/openshift/configuration-anomaly-detection/pkg/micro"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"k8s.io/apimachinery/pkg/fields"
@@ -29,17 +30,17 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	user, err := r.OcmClient.GetCreatorFromCluster(r.Cluster)
 	if err != nil {
 		notes.AppendWarning("encountered an issue when checking if the cluster owner is banned: %s", err)
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+		result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 			executor.Escalate("Failed to check user ban status - manual investigation required"),
 		)
 		return result, nil
 	}
 
 	if user.Banned() {
+		// Ban check uses account-level BanCode/BanDescription fields, not the ban API
+		// (ocmClient.CheckIfUserBanned), so micro.BannedUser cannot replace this.
 		notes.AppendWarning("User is banned: %s\nBan description: %s\nPlease open a proactive case, so that MCS can resolve the ban or organize a ownership transfer.", user.BanCode(), user.BanDescription())
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+		result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 			executor.Escalate("User is banned - proactive case required"),
 		)
 		return result, nil
@@ -49,12 +50,8 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	r, err = rb.WithK8sClient().Build()
 	if err != nil {
-		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
-			notes.AppendWarning("%s", msg)
-			result.Actions = append(
-				executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
-				executor.Escalate(msg),
-			)
+		if cr := micro.ClusterAccessError(err, notes); cr.Done {
+			result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(), cr.Actions...)
 			return result, nil
 		}
 		return result, err
@@ -71,8 +68,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if len(coList.Items) != 1 {
 		notes.AppendWarning("Found %d insights clusteroperators, expected 1", len(coList.Items))
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+		result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 			executor.Escalate("Unexpected insights clusteroperator count - manual investigation required"),
 		)
 		return result, nil
@@ -81,8 +77,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if isOCPBUG22226(&co) {
 		notes.AppendWarning("Found symptom of OCPBUGS-22226. Try deleting the insights operator pod to remediate.\n$ oc -n openshift-insights delete pods -l app=insights-operator --wait=false")
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+		result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 			executor.Escalate("OCPBUGS-22226 detected - manual remediation required"),
 		)
 		return result, nil
@@ -105,8 +100,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		notes.AppendSuccess("Network verifier passed")
 	}
 
-	result.Actions = append(
-		executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+	result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 		executor.Escalate("InsightsOperatorDown investigation completed - manual review required"),
 	)
 	return result, nil
