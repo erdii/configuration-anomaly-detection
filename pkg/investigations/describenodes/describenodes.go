@@ -12,6 +12,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/micro"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 
@@ -39,10 +40,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	r, err := rb.WithCluster().WithK8sClient().Build()
 	if err != nil {
-		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
+		if cr := micro.ClusterAccessError(err, nil); cr.Done {
 			logging.Warnf("Cluster access error for describe-nodes: %v", err)
 			result.Actions = []types.Action{
-				executor.Note(msg),
+				executor.Note(cr.Value),
 			}
 			return result, nil
 		}
@@ -62,7 +63,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if len(nodes) == 0 {
 		notes.AppendWarning("No nodes found matching the selection criteria")
-		result.Actions = executor.NoteAndReportFrom(notes, r.Cluster.ID(), i.Name())
+		result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), i.Name())
 		return result, nil
 	}
 
@@ -96,7 +97,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	notes.AppendAutomation("Full node descriptions below:\n\n%s", output.String())
 
-	result.Actions = executor.NoteAndReportFrom(notes, r.Cluster.ID(), i.Name())
+	result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), i.Name())
 	return result, nil
 }
 
