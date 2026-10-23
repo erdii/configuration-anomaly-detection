@@ -28,8 +28,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// report and exit if the cluster isn't an HCP cluster
 	if !r.IsHCP {
 		r.Notes.AppendSuccess("Cluster is not an HCP cluster, skipping control plane restart")
-		result.Actions = append(
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), c.Name()),
+		result.Actions = executor.FinalizeResult(r.Notes, r.Cluster.ID(), c.Name(),
 			executor.Silence("Control plane restart only applies to HCP clusters"),
 		)
 		return result, nil

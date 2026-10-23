@@ -54,8 +54,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		// Check for finding errors (should be reported)
 		if investigation.IsFindingError(err) {
 			r.Notes.AppendWarning("Could not complete instance investigation: %s", err.Error())
-			result.Actions = append(
-				executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+			result.Actions = executor.FinalizeResult(r.Notes, r.Cluster.ID(), i.Name(),
 				executor.Escalate("Investigation incomplete - manual review required"),
 			)
 			return result, nil
@@ -63,8 +62,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 		// Unknown error type - escalate for manual investigation
 		r.Notes.AppendWarning("Unexpected error during instance investigation: %s", err.Error())
-		result.Actions = append(
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+		result.Actions = executor.FinalizeResult(r.Notes, r.Cluster.ID(), i.Name(),
 			executor.Escalate("Investigation error - manual review required"),
 		)
 		return result, nil
@@ -75,8 +73,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
 		r.Notes.AppendWarning("Customer stopped instances.")
 
-		result.Actions = append(
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+		result.Actions = executor.FinalizeResult(r.Notes, r.Cluster.ID(), i.Name(),
 			executor.NewLimitedSupportAction(stoppedInfraLS.Summary, stoppedInfraLS.Details, "StoppedInstances").
 				Build(),
 			executor.Silence("Customer stopped instances - cluster in limited support"),
@@ -115,8 +112,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		if strings.Contains(failureReason, "nosnch.in") {
 			r.Notes.AppendWarning("Egress `nosnch.in` blocked.")
 
-			result.Actions = append(
-				executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+			result.Actions = executor.FinalizeResult(r.Notes, r.Cluster.ID(), i.Name(),
 				executor.NewLimitedSupportAction(egressLS.Summary, egressLS.Details, "EgressBlocked").
 					Build(),
 				executor.Silence("Deadman's snitch blocked - cluster in limited support"),
@@ -129,8 +125,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 		r.Notes.AppendWarning("NetworkVerifier found unreachable targets, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
 
-		result.Actions = append(
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+		result.Actions = executor.FinalizeResult(r.Notes, r.Cluster.ID(), i.Name(),
 			executor.NewServiceLogAction(egressSL.Severity, egressSL.Summary).
 				WithDescription(egressSL.Description).
 				WithServiceName(egressSL.ServiceName).
@@ -145,8 +140,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
 	// The report action will append to notes when executed, then note sends them to PagerDuty
-	result.Actions = append(
-		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+	result.Actions = executor.FinalizeResult(r.Notes, r.Cluster.ID(), i.Name(),
 		executor.Escalate("No automated remediation available - manual investigation required"),
 	)
 	return result, nil
