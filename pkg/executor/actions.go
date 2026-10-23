@@ -4,12 +4,16 @@ package executor
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/jira"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
+
+var jiraProjectKeyPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]+$`)
 
 // Action is the types.Action interface - all reporter actions implement it
 type Action = types.Action
@@ -28,6 +32,7 @@ const (
 	ActionTypeSilenceIncident      ActionType = "silence_incident"
 	ActionTypeEscalateIncident     ActionType = "escalate_incident"
 	ActionTypeBackplaneReport      ActionType = "backplane_report"
+	ActionTypeOHSSCase             ActionType = "ohss_case"
 )
 
 // ServiceLogAction sends a service log via OCM
@@ -347,5 +352,93 @@ func (a *PagerDutyTitleUpdate) Execute(ctx context.Context, execCtx *ExecutionCo
 	if err != nil {
 		return fmt.Errorf("failed to update PagerDuty incident title: %w", err)
 	}
+	return nil
+}
+
+// OHSSCaseAction creates an OHSS case in Jira
+type OHSSCaseAction struct {
+	ProjectKey  string
+	Summary     string
+	Description string
+	ClusterID   string
+	Priority    string
+	Labels      []string
+	Components  []string
+	IssueType   string
+	Reason      string
+}
+
+func (a *OHSSCaseAction) Type() string {
+	return string(ActionTypeOHSSCase)
+}
+
+func (a *OHSSCaseAction) ActionType() ActionType {
+	return ActionTypeOHSSCase
+}
+
+func (a *OHSSCaseAction) Validate() error {
+	if a.Summary == "" {
+		return fmt.Errorf("summary is required")
+	}
+	if a.ClusterID == "" {
+		return fmt.Errorf("clusterID is required")
+	}
+	return nil
+}
+
+func (a *OHSSCaseAction) Execute(ctx context.Context, execCtx *ExecutionContext) error {
+	if execCtx.JiraClient == nil {
+		return fmt.Errorf("jira client not available in execution context")
+	}
+
+	projectKey := a.ProjectKey
+	if projectKey == "" {
+		projectKey = "OHSS"
+	}
+	if !jiraProjectKeyPattern.MatchString(projectKey) {
+		return fmt.Errorf("invalid Jira project key: %q", projectKey)
+	}
+
+	issueType := a.IssueType
+	if issueType == "" {
+		issueType = "Bug"
+	}
+
+	jql := fmt.Sprintf(
+		`project = "%s" AND summary ~ %q AND status not in (Closed, Resolved) ORDER BY created DESC`,
+		projectKey, a.Summary,
+	)
+	existing, err := execCtx.JiraClient.SearchIssues(ctx, jql, 1)
+	if err != nil {
+		execCtx.Logger.Warnf("Failed to check for existing OHSS case, proceeding with creation: %v", err)
+	} else if len(existing) > 0 {
+		execCtx.Logger.Infof("Skipping OHSS case creation: open case already exists (%s)", existing[0].Key)
+		if execCtx.Notes != nil {
+			execCtx.Notes.AppendAutomation("OHSS case already exists: %s", existing[0].Key)
+		}
+		return nil
+	}
+
+	execCtx.Logger.Infof("Creating OHSS case: %s (cluster: %s, reason: %s)",
+		a.Summary, a.ClusterID, a.Reason)
+
+	issue, err := execCtx.JiraClient.CreateIssue(ctx, &jira.CreateIssueOptions{
+		ProjectKey:  projectKey,
+		IssueType:   issueType,
+		Summary:     a.Summary,
+		Description: a.Description,
+		Priority:    a.Priority,
+		Labels:      a.Labels,
+		Components:  a.Components,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create OHSS case: %w", err)
+	}
+
+	if execCtx.Notes != nil {
+		execCtx.Notes.AppendAutomation("Created OHSS case: %s", issue.Key)
+	}
+
+	execCtx.Logger.Infof("Successfully created OHSS case: %s", issue.Key)
 	return nil
 }

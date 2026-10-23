@@ -305,3 +305,85 @@ func Escalate(reason string) Action {
 func FinalizeResult(nw *notewriter.NoteWriter, clusterID, summary string, actions ...Action) []Action {
 	return append(NoteAndReportFrom(nw, clusterID, summary), actions...)
 }
+
+// OHSSCaseActionBuilder builds OHSSCaseAction instances
+type OHSSCaseActionBuilder struct {
+	projectKey  string
+	summary     string
+	description string
+	clusterID   string
+	priority    string
+	labels      []string
+	components  []string
+	issueType   string
+	reason      string
+}
+
+// NewOHSSCaseAction creates a builder with a required summary
+func NewOHSSCaseAction(summary string) *OHSSCaseActionBuilder {
+	return &OHSSCaseActionBuilder{
+		summary: summary,
+	}
+}
+
+func (b *OHSSCaseActionBuilder) WithDescription(description string) *OHSSCaseActionBuilder {
+	b.description = description
+	return b
+}
+
+func (b *OHSSCaseActionBuilder) ForCluster(clusterID string) *OHSSCaseActionBuilder {
+	b.clusterID = clusterID
+	return b
+}
+
+func (b *OHSSCaseActionBuilder) WithPriority(priority string) *OHSSCaseActionBuilder {
+	b.priority = priority
+	return b
+}
+
+func (b *OHSSCaseActionBuilder) WithLabels(labels ...string) *OHSSCaseActionBuilder {
+	b.labels = append(b.labels, labels...)
+	return b
+}
+
+func (b *OHSSCaseActionBuilder) WithComponents(components ...string) *OHSSCaseActionBuilder {
+	b.components = append(b.components, components...)
+	return b
+}
+
+func (b *OHSSCaseActionBuilder) WithIssueType(issueType string) *OHSSCaseActionBuilder {
+	b.issueType = issueType
+	return b
+}
+
+func (b *OHSSCaseActionBuilder) WithReason(reason string) *OHSSCaseActionBuilder {
+	b.reason = reason
+	return b
+}
+
+func (b *OHSSCaseActionBuilder) WithProjectKey(projectKey string) *OHSSCaseActionBuilder {
+	b.projectKey = projectKey
+	return b
+}
+
+func (b *OHSSCaseActionBuilder) Build() Action {
+	return &OHSSCaseAction{
+		ProjectKey:  b.projectKey,
+		Summary:     b.summary,
+		Description: b.description,
+		ClusterID:   b.clusterID,
+		Priority:    b.priority,
+		Labels:      b.labels,
+		Components:  b.components,
+		IssueType:   b.issueType,
+		Reason:      b.reason,
+	}
+}
+
+// OHSSCase creates a basic OHSS case action
+func OHSSCase(summary, description, clusterID string) Action {
+	return NewOHSSCaseAction(summary).
+		WithDescription(description).
+		ForCluster(clusterID).
+		Build()
+}
