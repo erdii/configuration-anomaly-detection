@@ -8,6 +8,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
+	"github.com/openshift/configuration-anomaly-detection/pkg/micro"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 
@@ -41,12 +42,8 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	r, err = rb.WithK8sClient().Build()
 	if err != nil {
-		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
-			notes.AppendWarning("%s", msg)
-			result.Actions = append(
-				executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
-				executor.Escalate(msg),
-			)
+		if cr := micro.ClusterAccessError(err, notes); cr.Done {
+			result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(), cr.Actions...)
 			return result, nil
 		}
 		return result, investigation.WrapInfrastructure(err, "Resource build error")
@@ -67,8 +64,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 	}
 	notes.AppendWarning("Alert escalated to on-call primary for review and please check the ClusterVersion.")
-	result.Actions = append(
-		executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+	result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 		executor.Escalate("CannotRetrieveUpdatesSRE investigation completed - manual review required"),
 	)
 	return result, nil
