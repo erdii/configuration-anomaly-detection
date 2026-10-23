@@ -2,6 +2,7 @@
 package ccam
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -24,7 +25,7 @@ var ccamLimitedSupport = &ocm.LimitedSupportReason{
 
 // Evaluates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support (if the cluster state allows it), otherwise an error is returned.
-func (c *CloudCredentialsCheck) Run(r investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *CloudCredentialsCheck) Run(ctx context.Context, r investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	// Apart from the defaults this investigation requires an AWS client which can fail to build
 	resources, err := r.WithAwsClient().Build()

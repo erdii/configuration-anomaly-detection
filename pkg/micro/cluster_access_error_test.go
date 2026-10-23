@@ -11,6 +11,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/micro"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/testutil"
 )
 
 var _ = Describe("ClusterAccessError", func() {
@@ -27,7 +28,7 @@ var _ = Describe("ClusterAccessError", func() {
 			result := micro.ClusterAccessError(err, notes)
 			Expect(result.Done).To(BeTrue())
 			Expect(result.Value).To(ContainSubstring("kube-api"))
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
 			Expect(notes.String()).To(ContainSubstring("kube-api"))
 		})
 	})
@@ -38,7 +39,7 @@ var _ = Describe("ClusterAccessError", func() {
 			result := micro.ClusterAccessError(err, notes)
 			Expect(result.Done).To(BeTrue())
 			Expect(result.Value).To(ContainSubstring("credentials"))
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
 			Expect(notes.String()).To(ContainSubstring("credentials"))
 		})
 	})

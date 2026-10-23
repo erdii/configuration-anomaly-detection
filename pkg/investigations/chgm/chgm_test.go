@@ -1,6 +1,7 @@
 package chgm
 
 import (
+	"context"
 	"fmt"
 
 	awsv2 "github.com/aws/aws-sdk-go-v2/aws"
@@ -17,35 +18,26 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/testutil"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	"go.uber.org/mock/gomock"
 )
 
-// Test helper functions to check for specific action types
-func hasActionType(actions []types.Action, actionType string) bool {
-	for _, action := range actions {
-		if action.Type() == actionType {
-			return true
-		}
-	}
-	return false
-}
-
 func hasLimitedSupportAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeLimitedSupport))
+	return testutil.HasActionType(actions, string(executor.ActionTypeLimitedSupport))
 }
 
 func hasSilenceAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeSilenceIncident))
+	return testutil.HasActionType(actions, string(executor.ActionTypeSilenceIncident))
 }
 
 func hasEscalateAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeEscalateIncident))
+	return testutil.HasActionType(actions, string(executor.ActionTypeEscalateIncident))
 }
 
 func hasNoteAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypePagerDutyNote))
+	return testutil.HasActionType(actions, string(executor.ActionTypePagerDutyNote))
 }
 
 var _ = Describe("chgm", func() {
@@ -140,7 +132,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
@@ -161,7 +153,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
@@ -174,7 +166,7 @@ var _ = Describe("chgm", func() {
 			It("should return infrastructure error for retry", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().ListNonRunningInstances(gomock.Any()).Return(nil, fmt.Errorf("could not retrieve non running instances: %w", fakeErr))
 
-				_, gotErr := inv.Run(r)
+				_, gotErr := inv.Run(context.Background(), r)
 
 				Expect(gotErr).To(HaveOccurred())
 				Expect(gotErr.Error()).To(ContainSubstring("infrastructure error"))
@@ -189,7 +181,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().GetBaseConfig().Return(&awsv2.Config{})
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				// Assert
 				Expect(gotErr).ToNot(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
@@ -204,7 +196,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("could not PollStopEventsFor: %w", fakeErr))
 
-				_, gotErr := inv.Run(r)
+				_, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).To(HaveOccurred())
 				Expect(gotErr.Error()).To(ContainSubstring("infrastructure error"))
 			})
@@ -218,7 +210,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{}, nil)
 
 				// Act
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).ToNot(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -233,7 +225,7 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = awsv2.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "654321"}}}}`)
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 				// Act
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				// Assert
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
@@ -255,7 +247,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -274,7 +266,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -294,7 +286,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Any(), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -314,7 +306,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -333,7 +325,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -352,7 +344,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -371,7 +363,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -390,7 +382,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -409,7 +401,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -428,7 +420,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -443,7 +435,7 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = awsv2.String(`{"eventVersion":"1.08", "userIdentity":{}}`)
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
@@ -459,7 +451,7 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = awsv2.String(`{"eventVersion":"1.08","userIdentity":{"type":"AssumedRole","principalId":"REDACTED:OCM","arn":"arn:aws:sts::1234:assumed-role/testuser/OCM","accountId":"1234","accessKeyId":"REDACTED","sessionContext":{"sessionIssuer":{"type":"Role","principalId":"REDACTED","arn":"arn:aws:iam::1234:role/testuser","accountId":"1234","userName":"testuser"},"webIdFederationData":{},"attributes":{"creationDate":"2023-02-21T04:08:01Z","mfaAuthenticated":"false"}}},"eventTime":"2023-02-21T04:10:40Z","eventSource":"ec2v2types.amazonawsv2.com","eventName":"TerminateInstances","awsRegion":"ap-southeast-1","sourceIPAddress":"192.168.0.0","userAgent":"aws-sdk-go-v2/1.17.3 os/linux lang/go/1.19.5 md/GOOS/linux md/GOARCH/amd64 api/ec2/1.25.0","requestParameters":{"instancesSet":{"items":[{"instanceId":"i-00c1f1234567"}]}},"responseElements":{"requestId":"credacted","instancesSet":{"items":[{"instanceId":"i-00c1f1234567","currentState":{"code":32,"name":"shutting-down"},"previousState":{"code":16,"name":"running"}}]}},"requestID":"credacted","eventID":"e55a8a64-9949-47a9-9fff-12345678","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"1234","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.2","cipherSuite":"ECDHE-RSA-AES128-GCM-SHA256","clientProvidedHostHeader":"ec2v2types.ap-southeast-1.amazonawsv2.com"}}`)
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
@@ -475,7 +467,7 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = awsv2.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"test"}}}}`)
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
@@ -490,7 +482,7 @@ var _ = Describe("chgm", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]ec2v2types.Instance{instance}, nil)
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
@@ -507,7 +499,7 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = awsv2.String(`{"eventVersion":"1.08", "userIdentity":{}}`)
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
@@ -524,7 +516,7 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = awsv2.String(`{"eventVersion":"1.08", "userIdentity":{"type":"IAMUser"}}`)
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
@@ -542,7 +534,7 @@ var _ = Describe("chgm", func() {
 				event.Resources = []cloudtrailv2types.Resource{cloudTrailResource}
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -559,7 +551,7 @@ var _ = Describe("chgm", func() {
 				event.Resources = []cloudtrailv2types.Resource{cloudTrailResource}
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -576,7 +568,7 @@ var _ = Describe("chgm", func() {
 				event.Resources = []cloudtrailv2types.Resource{cloudTrailResource}
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -593,7 +585,7 @@ var _ = Describe("chgm", func() {
 				event.Resources = []cloudtrailv2types.Resource{cloudTrailResource}
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
@@ -610,7 +602,7 @@ var _ = Describe("chgm", func() {
 				event.Resources = []cloudtrailv2types.Resource{cloudTrailResource}
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 
-				result, gotErr := inv.Run(r)
+				result, gotErr := inv.Run(context.Background(), r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())

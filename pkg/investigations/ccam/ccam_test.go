@@ -1,6 +1,7 @@
 package ccam
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -22,7 +23,7 @@ func TestEvaluateRandomError(t *testing.T) {
 
 	inv := CloudCredentialsCheck{}
 
-	_, err := inv.Run(&input)
+	_, err := inv.Run(context.Background(), &input)
 	if err.Error() != timeoutError.Error() {
 		t.Fatalf("Expected error %v, but got %v", timeoutError, err)
 	}

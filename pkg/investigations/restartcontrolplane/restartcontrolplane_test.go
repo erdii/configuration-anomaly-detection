@@ -13,6 +13,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/testutil"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -20,26 +21,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-// Test helper functions to check for specific action types
-func hasActionType(actions []types.Action, actionType string) bool {
-	for _, action := range actions {
-		if action.Type() == actionType {
-			return true
-		}
-	}
-	return false
-}
-
 func hasSilenceAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeSilenceIncident))
+	return testutil.HasActionType(actions, string(executor.ActionTypeSilenceIncident))
 }
 
 func hasNoteAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypePagerDutyNote))
+	return testutil.HasActionType(actions, string(executor.ActionTypePagerDutyNote))
 }
 
 func hasBackplaneReportAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeBackplaneReport))
+	return testutil.HasActionType(actions, string(executor.ActionTypeBackplaneReport))
 }
 
 func TestInvestigation_Name(t *testing.T) {
@@ -55,7 +46,7 @@ func TestInvestigation_Run_BuildError(t *testing.T) {
 	}
 	inv := &Investigation{}
 
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	assert.Empty(t, result)
 	assert.Error(t, err)
 	assert.Equal(t, buildErr, err)
@@ -75,7 +66,7 @@ func TestInvestigation_Run_NonHCPCluster(t *testing.T) {
 	}
 	inv := &Investigation{}
 
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, result.Actions)
 
@@ -102,7 +93,7 @@ func TestInvestigation_Run_GetHostedClusterFails(t *testing.T) {
 	}
 	inv := &Investigation{}
 
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	assert.Empty(t, result)
 	assert.Error(t, err)
 	var infraErr investigation.InfrastructureError
@@ -140,7 +131,7 @@ func TestInvestigation_Run_Success(t *testing.T) {
 	}
 	inv := &Investigation{}
 
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.Empty(t, result.StopInvestigations)
 

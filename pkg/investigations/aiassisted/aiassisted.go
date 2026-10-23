@@ -47,7 +47,7 @@ func generateSessionID(incidentID string) string {
 	return fmt.Sprintf("cad-%s-%d-%s", incidentID, timestamp, randomHex)
 }
 
-func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 
 	// Build resources
@@ -90,7 +90,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	aiConfig := c.AIConfig
 
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.TODO(), aiConfig.GetTimeout())
+	ctx, cancel := context.WithTimeout(ctx, aiConfig.GetTimeout())
 	defer cancel()
 
 	// Get PagerDuty incident details

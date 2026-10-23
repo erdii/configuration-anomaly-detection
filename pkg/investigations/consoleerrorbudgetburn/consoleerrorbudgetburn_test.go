@@ -1220,7 +1220,7 @@ func TestRun_HCP_SkipsAllowedSourceRanges(t *testing.T) {
 	}
 
 	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber(), probeHistoryCheck: noopProbeHistoryChecker()}
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1260,7 +1260,7 @@ func TestRun_AllowedSourceRangesMisconfigured(t *testing.T) {
 	}
 
 	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber(), probeHistoryCheck: noopProbeHistoryChecker()}
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1312,7 +1312,7 @@ func TestRun_AllowedSourceRangesOK(t *testing.T) {
 	}
 
 	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber(), probeHistoryCheck: noopProbeHistoryChecker()}
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1348,7 +1348,7 @@ func TestRun_ClusterAccessError(t *testing.T) {
 	}
 
 	inv := &Investigation{}
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	if err != nil {
 		t.Fatalf("expected nil error for cluster access error, got: %v", err)
 	}
@@ -1386,7 +1386,7 @@ func TestRun_NonAWSCluster_SkipsAWSChecks(t *testing.T) {
 	}
 
 	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber(), probeHistoryCheck: noopProbeHistoryChecker()}
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1454,7 +1454,7 @@ func TestRun_AWSCluster_AWSChecksRun(t *testing.T) {
 		probeHistoryCheck: noopProbeHistoryChecker(),
 		egressVerifier:    successEgressVerifier(),
 	}
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2921,7 +2921,7 @@ func TestRun_PrivateLink_SkipsEgress(t *testing.T) {
 		probeHistoryCheck: noopProbeHistoryChecker(),
 		egressVerifier:    egressMock,
 	}
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

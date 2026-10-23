@@ -1,6 +1,7 @@
 package clusteroperatordownhcp
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/testutil"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -31,25 +33,16 @@ const HCP_NAMESPACE = "ocm-test-hcp-namespace"
 // the tests build.
 const STOPPED_INSTANCE_ID = "i-0stopped456"
 
-func hasActionType(actions []types.Action, actionType string) bool {
-	for _, action := range actions {
-		if action.Type() == actionType {
-			return true
-		}
-	}
-	return false
-}
-
 func hasEscalateAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeEscalateIncident))
+	return testutil.HasActionType(actions, string(executor.ActionTypeEscalateIncident))
 }
 
 func hasSilenceAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeSilenceIncident))
+	return testutil.HasActionType(actions, string(executor.ActionTypeSilenceIncident))
 }
 
 func hasServiceLogAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeServiceLog))
+	return testutil.HasActionType(actions, string(executor.ActionTypeServiceLog))
 }
 
 // awsMachine builds an unstructured AWSMachine for the fake management client,
@@ -125,7 +118,7 @@ func TestInvestigation_Run_BuildError(t *testing.T) {
 	buildErr := errors.New("build failed")
 	rb := &investigation.ResourceBuilderMock{Resources: nil, BuildError: buildErr}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.Empty(t, result)
 	assert.Equal(t, buildErr, err)
 }
@@ -144,7 +137,7 @@ func TestInvestigation_Run_NonHCPEscalates(t *testing.T) {
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasEscalateAction(result.Actions), "non-HCP should escalate to a human")
 	assert.False(t, hasSilenceAction(result.Actions), "non-HCP must not silence")
@@ -170,7 +163,7 @@ func TestInvestigation_Run_NoStoppedMachineEscalates(t *testing.T) {
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasEscalateAction(result.Actions), "no stopped machine should escalate")
 	assert.False(t, hasServiceLogAction(result.Actions), "no service log when nothing is stopped")
@@ -193,7 +186,7 @@ func TestInvestigation_Run_EmptyMachineListEscalates(t *testing.T) {
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasEscalateAction(result.Actions), "empty machine list should escalate")
 	assert.False(t, hasServiceLogAction(result.Actions), "no service log on an empty list")
@@ -237,7 +230,7 @@ func TestInvestigation_Run_StoppedMachineSendsServiceLogAndSilences(t *testing.T
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasServiceLogAction(result.Actions), "stopped machine should send a service log")
 	assert.True(t, hasSilenceAction(result.Actions), "stopped machine should silence")
@@ -264,7 +257,7 @@ func TestInvestigation_Run_StoppedMachineWithoutInstanceIDEscalates(t *testing.T
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasEscalateAction(result.Actions), "stopped machine without an instance ID should escalate")
 	assert.False(t, hasServiceLogAction(result.Actions), "no service log without attribution")
@@ -311,7 +304,7 @@ func TestInvestigation_Run_TerminateEventIsNotAttribution(t *testing.T) {
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasEscalateAction(result.Actions), "a terminate event must not attribute a stop")
 	assert.False(t, hasServiceLogAction(result.Actions), "no service log from a terminate event")
@@ -348,7 +341,7 @@ func TestInvestigation_Run_UnattributedStopEscalates(t *testing.T) {
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasEscalateAction(result.Actions), "unattributed stop should escalate")
 	assert.False(t, hasServiceLogAction(result.Actions), "no service log without CloudTrail attribution")

@@ -56,7 +56,7 @@ func NewResourceBuilder(
 }
 
 type Investigation interface {
-	Run(builder ResourceBuilder) (InvestigationResult, error)
+	Run(ctx context.Context, builder ResourceBuilder) (InvestigationResult, error)
 	// Please note that when adding an investigation the name and the directory currently need to be the same,
 	// so that backplane-api can fetch the metadata.yaml
 	Name() string

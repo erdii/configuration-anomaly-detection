@@ -1,6 +1,7 @@
 package aiassisted
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/testutil"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	"go.uber.org/mock/gomock"
@@ -34,22 +36,12 @@ func TestAiassisted(t *testing.T) {
 	RunSpecs(t, "Aiassisted Suite")
 }
 
-// Test helper functions to check for specific action types
-func hasActionType(actions []types.Action, actionType string) bool {
-	for _, action := range actions {
-		if action.Type() == actionType {
-			return true
-		}
-	}
-	return false
-}
-
 func hasEscalateAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeEscalateIncident))
+	return testutil.HasActionType(actions, string(executor.ActionTypeEscalateIncident))
 }
 
 func hasNoteAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypePagerDutyNote))
+	return testutil.HasActionType(actions, string(executor.ActionTypePagerDutyNote))
 }
 
 var _ = Describe("aiassisted", func() {
@@ -106,7 +98,7 @@ var _ = Describe("aiassisted", func() {
 				r.Resources.IsInfrastructureCluster = true
 
 				inv := Investigation{}
-				result, err := inv.Run(r)
+				result, err := inv.Run(context.Background(), r)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
@@ -118,7 +110,7 @@ var _ = Describe("aiassisted", func() {
 		Context("when AI runtime configuration is nil", func() {
 			It("should escalate with configuration warning", func() {
 				inv := Investigation{}
-				result, err := inv.Run(r)
+				result, err := inv.Run(context.Background(), r)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
@@ -156,7 +148,7 @@ var _ = Describe("aiassisted", func() {
 						TimeoutSeconds: 0,
 					},
 				}
-				result, err := inv.Run(r)
+				result, err := inv.Run(context.Background(), r)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())

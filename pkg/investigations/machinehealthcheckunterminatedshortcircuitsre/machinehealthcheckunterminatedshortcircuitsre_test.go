@@ -15,7 +15,7 @@ import (
 	nodeutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/node"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"github.com/openshift/configuration-anomaly-detection/pkg/types"
+	"github.com/openshift/configuration-anomaly-detection/pkg/testutil"
 
 	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
@@ -666,18 +666,18 @@ func TestInvestigation_Run_SCPDisposition(t *testing.T) {
 			}
 
 			i := &Investigation{}
-			result, err := i.Run(rb)
+			result, err := i.Run(context.Background(), rb)
 			if err != nil {
 				t.Fatalf("unexpected error from Run(): %v", err)
 			}
 
 			// An SCP deny must always queue the customer-facing service log.
-			if !hasActionType(result.Actions, executor.ActionTypeServiceLog) {
+			if !testutil.HasActionType(result.Actions, string(executor.ActionTypeServiceLog)) {
 				t.Errorf("expected a ServiceLog action for an SCP deny")
 			}
 
-			gotSilence := hasActionType(result.Actions, executor.ActionTypeSilenceIncident)
-			gotEscalate := hasActionType(result.Actions, executor.ActionTypeEscalateIncident)
+			gotSilence := testutil.HasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))
+			gotEscalate := testutil.HasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))
 
 			if tt.wantSilence && (!gotSilence || gotEscalate) {
 				t.Errorf("expected Silence and no Escalate; got silence=%t escalate=%t", gotSilence, gotEscalate)
@@ -757,11 +757,6 @@ func newTestCluster(id string) *cmv1.Cluster {
 	return cluster
 }
 
-func hasActionType(actions []types.Action, want executor.ActionType) bool {
-	return slices.ContainsFunc(actions, func(a types.Action) bool {
-		return a.Type() == string(want)
-	})
-}
 
 func newTestInvestigation(testObjects ...client.Object) (Investigation, error) {
 	fakeClient, err := newFakeClient(testObjects...)

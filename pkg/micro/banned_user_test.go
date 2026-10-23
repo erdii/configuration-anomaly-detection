@@ -11,19 +11,10 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/micro"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/testutil"
 	"go.uber.org/mock/gomock"
 )
-
-func hasActionType(actions []types.Action, actionType string) bool {
-	for _, action := range actions {
-		if action.Type() == actionType {
-			return true
-		}
-	}
-	return false
-}
 
 var _ = Describe("CheckBan", func() {
 	var notes *notewriter.NoteWriter
@@ -59,15 +50,15 @@ var _ = Describe("CheckBan", func() {
 			Expect(result.Done).To(BeTrue())
 			Expect(result.Value.Code).To(Equal("export_control_compliance"))
 			Expect(result.Value.Description).To(Equal("Export control violation"))
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeFalse())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeServiceLog))).To(BeFalse())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeFalse())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeServiceLog))).To(BeFalse())
 			Expect(notes.String()).To(ContainSubstring("export control"))
 		})
 	})
 
 	When("user is banned for other reasons", func() {
-		It("should return Done with ServiceLog and Silence", func() {
+		It("should return Done with ServiceLog and Escalate", func() {
 			account, err := amv1.NewAccount().
 				ID("user-1").
 				Banned(true).
@@ -80,9 +71,9 @@ var _ = Describe("CheckBan", func() {
 			Expect(result.Done).To(BeTrue())
 			Expect(result.Value.Code).To(Equal("terms_and_conditions"))
 			Expect(result.Value.Description).To(Equal("Terms violation"))
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeServiceLog))).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeFalse())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeServiceLog))).To(BeTrue())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeFalse())
 			Expect(notes.String()).To(ContainSubstring("terms_and_conditions"))
 			Expect(notes.String()).To(ContainSubstring("Service Log"))
 		})
@@ -121,13 +112,13 @@ var _ = Describe("BannedUser", func() {
 			result, err := micro.BannedUser(ocmClient, cluster, notes)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Done).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeFalse())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeFalse())
 		})
 	})
 
 	When("user is banned for other reasons", func() {
-		It("should return Done with ServiceLog and Silence", func() {
+		It("should return Done with ServiceLog and Escalate", func() {
 			account, _ := amv1.NewAccount().ID("user-1").
 				Banned(true).BanCode("terms_and_conditions").
 				BanDescription("Terms violation").Build()
@@ -136,8 +127,9 @@ var _ = Describe("BannedUser", func() {
 			result, err := micro.BannedUser(ocmClient, cluster, notes)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Done).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeServiceLog))).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeTrue())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeServiceLog))).To(BeTrue())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeFalse())
 		})
 	})
 

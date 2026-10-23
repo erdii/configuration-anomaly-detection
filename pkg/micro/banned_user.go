@@ -53,7 +53,7 @@ func CheckBan(account *amv1.Account, notes *notewriter.NoteWriter) DataResult[Ba
 					WithDescription(sl.Description).
 					WithServiceName(sl.ServiceName).
 					Build(),
-				executor.Silence("Banned OCM user - service log sent to customer"),
+				executor.Escalate("Banned OCM user, please open a proactive ticket."),
 			},
 		},
 		Value: info,

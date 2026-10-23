@@ -14,6 +14,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/micro"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pullsecret"
+	"github.com/openshift/configuration-anomaly-detection/pkg/testutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -62,7 +63,7 @@ func newTestOCMConn(handler http.Handler) (*sdk.Connection, *httptest.Server) {
 func emptyRegistryCredentialsHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"items":[],"size":0,"total":0,"page":1}`)
+		_, _ = fmt.Fprint(w, `{"items":[],"size":0,"total":0,"page":1}`)
 	})
 }
 
@@ -70,7 +71,7 @@ func errorHandler(code int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
-		fmt.Fprint(w, `{"reason":"test error"}`)
+		_, _ = fmt.Fprint(w, `{"reason":"test error"}`)
 	})
 }
 
@@ -99,31 +100,31 @@ var _ = Describe("PullSecret", func() {
 
 			conn, server := newTestOCMConn(emptyRegistryCredentialsHandler())
 			defer server.Close()
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 
 			result, err := micro.PullSecret(k8sClient, conn, "user-id", "ocm@test.com", notes)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Done).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeFalse())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeFalse())
 			Expect(notes.String()).To(ContainSubstring("does not match"))
 		})
 	})
 
 	When("pull secret email matches and no registry credentials exist", func() {
-		It("should silence", func() {
+		It("should escalate with valid pull secret message", func() {
 			secret := newPullSecret("user@test.com")
 			k8sClient := fake.NewClientBuilder().WithScheme(pullSecretScheme()).WithObjects(secret).Build()
 
 			conn, server := newTestOCMConn(emptyRegistryCredentialsHandler())
 			defer server.Close()
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 
 			result, err := micro.PullSecret(k8sClient, conn, "user-id", "user@test.com", notes)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Done).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeFalse())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeFalse())
 		})
 	})
 
@@ -134,13 +135,13 @@ var _ = Describe("PullSecret", func() {
 
 			conn, server := newTestOCMConn(errorHandler(http.StatusInternalServerError))
 			defer server.Close()
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 
 			result, err := micro.PullSecret(k8sClient, conn, "user-id", "user@test.com", notes)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Done).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeFalse())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
+			Expect(testutil.HasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeFalse())
 		})
 	})
 
@@ -151,7 +152,7 @@ var _ = Describe("PullSecret", func() {
 
 			conn, server := newTestOCMConn(emptyRegistryCredentialsHandler())
 			defer server.Close()
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 
 			_, err := micro.PullSecret(k8sClient, conn, "user-id", "user@test.com", notes)
 			Expect(err).NotTo(HaveOccurred())

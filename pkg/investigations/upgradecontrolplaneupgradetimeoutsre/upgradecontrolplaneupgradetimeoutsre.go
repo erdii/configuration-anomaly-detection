@@ -66,7 +66,7 @@ type Investigation struct{}
 
 // Run gates on cluster type, then silences completed upgrades and sends a
 // service log for customer-PDB-blocked drains. Everything else is escalated.
-func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (i *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 
 	r, err := rb.WithCluster().WithK8sClient().WithNotes().Build()
@@ -103,7 +103,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return escalate("Unexpected HCP cluster for UpgradeControlPlaneUpgradeTimeoutSRE")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), checksTimeout)
+	ctx, cancel := context.WithTimeout(ctx, checksTimeout)
 	defer cancel()
 
 	cv := &configv1.ClusterVersion{}

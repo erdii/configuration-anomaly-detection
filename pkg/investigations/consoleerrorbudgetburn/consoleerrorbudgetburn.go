@@ -67,7 +67,7 @@ type Investigation struct {
 	egressVerifier    egressVerifier
 }
 
-func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (i *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	if i.consoleChecker == nil {
 		i.consoleChecker = &defaultConsoleServiceChecker{}
 	}
@@ -81,7 +81,6 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		i.egressVerifier = &defaultEgressVerifier{}
 	}
 
-	ctx := context.Background()
 	result := investigation.InvestigationResult{}
 
 	r, err := rb.WithCluster().WithK8sClient().Build()

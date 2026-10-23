@@ -25,6 +25,7 @@ import (
 const (
 	muoNamespace      = "openshift-managed-upgrade-operator"
 	muoConfigMapName  = "managed-upgrade-operator-config"
+	muoConfigKey      = "config.yaml"
 	muoDeploymentName = "managed-upgrade-operator"
 	expectedOCMBase   = "https://api.openshift.com"
 )
@@ -38,7 +39,7 @@ type muoConfig struct {
 
 type Investigation struct{}
 
-func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	r, err := rb.WithCluster().Build()
 	if err != nil {
 		return investigation.InvestigationResult{}, err
@@ -65,14 +66,13 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return investigation.InvestigationResult{}, investigation.WrapInfrastructure(err, "Resource build error")
 	}
 
-	if err := checkMUOConfig(r.K8sClient, notes); err != nil {
+	if err := checkMUOConfig(ctx, r.K8sClient, notes); err != nil {
 		logging.Warnf("Failed to validate MUO config: %v", err)
 	}
 
-	muoActions, err := checkMUOLogs(r.K8sClient, r.Cluster.ID(), notes)
+	muoActions, err := checkMUOLogs(ctx, r.K8sClient, r.Cluster.ID(), notes)
 	if err != nil {
 		logging.Warnf("Failed to read MUO logs: %v", err)
-		notes.AppendWarning("MUO log analysis skipped: %v", err)
 	}
 	o.Collect(muoActions...)
 
@@ -88,26 +88,28 @@ func (c *Investigation) Name() string {
 	return "upgradeconfigsyncfailureover4hr"
 }
 
-func checkMUOConfig(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) error {
+func checkMUOConfig(ctx context.Context, k8sClient k8sclient.Client, notes *notewriter.NoteWriter) error {
 	cm := &corev1.ConfigMap{}
-	err := k8sClient.Get(context.TODO(), k8stypes.NamespacedName{
+	err := k8sClient.Get(ctx, k8stypes.NamespacedName{
 		Namespace: muoNamespace,
 		Name:      muoConfigMapName,
 	}, cm)
 	if err != nil {
-		notes.AppendWarning("Failed to read MUO configmap: %v", err)
+		logging.Warnf("Failed to read MUO configmap: %v", err)
+		notes.AppendWarning("Failed to read MUO configmap")
 		return err
 	}
 
-	rawConfig, ok := cm.Data["config.yaml"]
+	rawConfig, ok := cm.Data[muoConfigKey]
 	if !ok {
-		notes.AppendWarning("MUO configmap missing 'config.yaml' key")
-		return fmt.Errorf("configmap missing config.yaml key")
+		notes.AppendWarning("MUO configmap missing '%s' key", muoConfigKey)
+		return fmt.Errorf("configmap missing %s key", muoConfigKey)
 	}
 
 	var cfg muoConfig
 	if err := yaml.Unmarshal([]byte(rawConfig), &cfg); err != nil {
-		notes.AppendWarning("Failed to parse MUO config: %v", err)
+		logging.Warnf("Failed to parse MUO config: %v", err)
+		notes.AppendWarning("Failed to parse MUO config")
 		return err
 	}
 
@@ -120,15 +122,14 @@ func checkMUOConfig(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) er
 	return nil
 }
 
-func checkMUOLogs(k8sClient k8sclient.Client, clusterID string, notes *notewriter.NoteWriter) ([]types.Action, error) {
-	ctx := context.TODO()
-
+func checkMUOLogs(ctx context.Context, k8sClient k8sclient.Client, clusterID string, notes *notewriter.NoteWriter) ([]types.Action, error) {
 	podList := &corev1.PodList{}
 	if err := k8sClient.List(ctx, podList,
 		client.InNamespace(muoNamespace),
 		client.MatchingLabels{"name": muoDeploymentName},
 	); err != nil {
-		notes.AppendWarning("Failed to list MUO pods: %v", err)
+		logging.Warnf("Failed to list MUO pods: %v", err)
+		notes.AppendWarning("Failed to list MUO pods")
 		return nil, err
 	}
 
@@ -151,14 +152,17 @@ func checkMUOLogs(k8sClient k8sclient.Client, clusterID string, notes *notewrite
 
 	pod := &podList.Items[0]
 	tailLines := int64(200)
+	limitBytes := int64(1 << 20) // 1 MiB
 	logOptions := &corev1.PodLogOptions{
-		TailLines: &tailLines,
+		TailLines:  &tailLines,
+		LimitBytes: &limitBytes,
 	}
 
 	req := clientset.CoreV1().Pods(muoNamespace).GetLogs(pod.Name, logOptions)
 	logStream, err := req.Stream(ctx)
 	if err != nil {
-		notes.AppendWarning("Failed to read MUO pod logs: %v", err)
+		logging.Warnf("Failed to read MUO pod logs: %v", err)
+		notes.AppendWarning("Failed to read MUO pod logs")
 		return nil, err
 	}
 	defer func() {

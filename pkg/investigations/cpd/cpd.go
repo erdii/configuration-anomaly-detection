@@ -2,6 +2,7 @@
 package cpd
 
 import (
+	"context"
 	"fmt"
 
 	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
@@ -42,7 +43,7 @@ func newBYOVPCRoutingSL(docLink string) *ocm.ServiceLog {
 // - always escalate the alert to primary
 // The reasoning for this is that we don't fully trust network verifier yet.
 // In the future, we want to automate service logs based on the network verifier output.
-func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	r, err := rb.WithClusterDeployment().WithAwsClient().Build()
 	if err != nil {

@@ -1,6 +1,7 @@
 package upgradeconfigsyncfailureover4hr
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -12,39 +13,84 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/testutil"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 )
 
 func testScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
-	_ = corev1.AddToScheme(s)
+	utilruntime.Must(corev1.AddToScheme(s))
 	return s
 }
 
-func hasActionType(actions []types.Action, actionType string) bool {
-	for _, action := range actions {
-		if action.Type() == actionType {
-			return true
-		}
-	}
-	return false
-}
-
 func hasSilenceAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeSilenceIncident))
+	return testutil.HasActionType(actions, string(executor.ActionTypeSilenceIncident))
 }
 
 func hasEscalateAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeEscalateIncident))
+	return testutil.HasActionType(actions, string(executor.ActionTypeEscalateIncident))
 }
 
 func hasServiceLogAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeServiceLog))
+	return testutil.HasActionType(actions, string(executor.ActionTypeServiceLog))
+}
+
+// k8sFailBuilder wraps ResourceBuilderMock to fail on the second Build call
+// (after WithK8sClient), simulating cluster access errors.
+type k8sFailBuilder struct {
+	inner    *investigation.ResourceBuilderMock
+	k8sErr   error
+	buildK8s bool
+}
+
+func (b *k8sFailBuilder) WithCluster() investigation.ResourceBuilder { b.inner.WithCluster(); return b }
+
+func (b *k8sFailBuilder) WithClusterDeployment() investigation.ResourceBuilder {
+	b.inner.WithClusterDeployment()
+	return b
+}
+
+func (b *k8sFailBuilder) WithAwsClient() investigation.ResourceBuilder {
+	b.inner.WithAwsClient()
+	return b
+}
+
+func (b *k8sFailBuilder) WithRestConfig() investigation.ResourceBuilder {
+	b.inner.WithRestConfig()
+	return b
+}
+func (b *k8sFailBuilder) WithOC() investigation.ResourceBuilder    { b.inner.WithOC(); return b }
+func (b *k8sFailBuilder) WithNotes() investigation.ResourceBuilder { b.inner.WithNotes(); return b }
+func (b *k8sFailBuilder) WithManagementRestConfig() investigation.ResourceBuilder {
+	b.inner.WithManagementRestConfig()
+	return b
+}
+
+func (b *k8sFailBuilder) WithManagementK8sClient() investigation.ResourceBuilder {
+	b.inner.WithManagementK8sClient()
+	return b
+}
+
+func (b *k8sFailBuilder) WithManagementOCClient() investigation.ResourceBuilder {
+	b.inner.WithManagementOCClient()
+	return b
+}
+func (b *k8sFailBuilder) WithPdClient(_ pagerduty.Client) investigation.ResourceBuilder { return b }
+func (b *k8sFailBuilder) WithK8sClient() investigation.ResourceBuilder                  { b.buildK8s = true; return b }
+
+func (b *k8sFailBuilder) Build() (*investigation.Resources, error) {
+	if b.buildK8s {
+		return b.inner.Resources, b.k8sErr
+	}
+	return b.inner.Build()
 }
 
 var _ = Describe("parseMUOLogs", func() {
@@ -131,13 +177,13 @@ var _ = Describe("checkMUOConfig", func() {
 				Namespace: muoNamespace,
 			},
 			Data: map[string]string{
-				"config.yaml": `configManager:
+				muoConfigKey: `configManager:
   source: OCM
   ocmBaseUrl: https://api.openshift.com`,
 			},
 		}
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		err := checkMUOConfig(context.Background(), k8sClient, notes)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(notes.String()).To(ContainSubstring("ocmBaseUrl is correct"))
 	})
@@ -149,13 +195,13 @@ var _ = Describe("checkMUOConfig", func() {
 				Namespace: muoNamespace,
 			},
 			Data: map[string]string{
-				"config.yaml": `configManager:
+				muoConfigKey: `configManager:
   source: OCM
   ocmBaseUrl: https://wrong.example.com`,
 			},
 		}
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		err := checkMUOConfig(context.Background(), k8sClient, notes)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(notes.String()).To(ContainSubstring("wrong.example.com"))
 		Expect(notes.String()).To(ContainSubstring(expectedOCMBase))
@@ -163,7 +209,7 @@ var _ = Describe("checkMUOConfig", func() {
 
 	It("should error when configmap not found", func() {
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		err := checkMUOConfig(context.Background(), k8sClient, notes)
 		Expect(err).To(HaveOccurred())
 		Expect(notes.String()).To(ContainSubstring("Failed to read MUO configmap"))
 	})
@@ -179,7 +225,7 @@ var _ = Describe("checkMUOConfig", func() {
 			},
 		}
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		err := checkMUOConfig(context.Background(), k8sClient, notes)
 		Expect(err).To(HaveOccurred())
 		Expect(notes.String()).To(ContainSubstring("missing 'config.yaml' key"))
 	})
@@ -191,11 +237,11 @@ var _ = Describe("checkMUOConfig", func() {
 				Namespace: muoNamespace,
 			},
 			Data: map[string]string{
-				"config.yaml": `: invalid yaml [[[`,
+				muoConfigKey: `: invalid yaml [[[`,
 			},
 		}
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		err := checkMUOConfig(context.Background(), k8sClient, notes)
 		Expect(err).To(HaveOccurred())
 		Expect(notes.String()).To(ContainSubstring("Failed to parse MUO config"))
 	})
@@ -237,7 +283,7 @@ var _ = Describe("Run", func() {
 				GetCreatorFromCluster(gomock.Any()).
 				Return(account, nil)
 
-			result, err := inv.Run(r)
+			result, err := inv.Run(context.Background(), r)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 			Expect(hasSilenceAction(result.Actions)).To(BeFalse())
@@ -245,7 +291,7 @@ var _ = Describe("Run", func() {
 	})
 
 	When("user is banned for other reasons", func() {
-		It("should send service log and silence", func() {
+		It("should send service log and escalate", func() {
 			account, _ := amv1.NewAccount().ID("user-1").
 				Banned(true).BanCode("terms_and_conditions").
 				BanDescription("Terms violation").Build()
@@ -253,11 +299,11 @@ var _ = Describe("Run", func() {
 				GetCreatorFromCluster(gomock.Any()).
 				Return(account, nil)
 
-			result, err := inv.Run(r)
+			result, err := inv.Run(context.Background(), r)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(hasServiceLogAction(result.Actions)).To(BeTrue())
-			Expect(hasSilenceAction(result.Actions)).To(BeTrue())
-			Expect(hasEscalateAction(result.Actions)).To(BeFalse())
+			Expect(hasEscalateAction(result.Actions)).To(BeTrue())
+			Expect(hasSilenceAction(result.Actions)).To(BeFalse())
 		})
 	})
 
@@ -267,7 +313,7 @@ var _ = Describe("Run", func() {
 				GetCreatorFromCluster(gomock.Any()).
 				Return(nil, fmt.Errorf("connection timeout"))
 
-			result, err := inv.Run(r)
+			result, err := inv.Run(context.Background(), r)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 			Expect(hasSilenceAction(result.Actions)).To(BeFalse())
@@ -278,9 +324,46 @@ var _ = Describe("Run", func() {
 		It("should propagate the error", func() {
 			r.BuildError = fmt.Errorf("infrastructure error: resource build failed")
 
-			_, err := inv.Run(r)
+			_, err := inv.Run(context.Background(), r)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("infrastructure error"))
+		})
+	})
+
+	When("second build fails with cluster access error", func() {
+		It("should escalate with cluster access message", func() {
+			account, _ := amv1.NewAccount().ID("user-1").Banned(false).Build()
+			r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().
+				GetCreatorFromCluster(gomock.Any()).
+				Return(account, nil)
+
+			fb := &k8sFailBuilder{
+				inner:  r,
+				k8sErr: investigation.RestConfigError{ClusterID: "test-cluster-id", Err: fmt.Errorf("unable to get credentials")},
+			}
+
+			result, err := inv.Run(context.Background(), fb)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hasEscalateAction(result.Actions)).To(BeTrue())
+			Expect(hasSilenceAction(result.Actions)).To(BeFalse())
+		})
+	})
+
+	When("second build fails with non-cluster-access error", func() {
+		It("should propagate as infrastructure error", func() {
+			account, _ := amv1.NewAccount().ID("user-1").Banned(false).Build()
+			r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().
+				GetCreatorFromCluster(gomock.Any()).
+				Return(account, nil)
+
+			fb := &k8sFailBuilder{
+				inner:  r,
+				k8sErr: fmt.Errorf("unexpected failure"),
+			}
+
+			_, err := inv.Run(context.Background(), fb)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Resource build error"))
 		})
 	})
 })

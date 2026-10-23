@@ -71,8 +71,7 @@ type Investigation struct {
 	eolChecker       eolChecker
 }
 
-func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
-	ctx := context.Background()
+func (i *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 
 	r, err := rb.WithCluster().WithK8sClient().Build()

@@ -14,7 +14,7 @@ import (
 
 // PullSecret validates the cluster's pull secret against OCM.
 // Always returns Done: true — both valid and invalid pull secrets are
-// terminal findings (valid → silence, invalid → escalate).
+// terminal findings that escalate for SRE review.
 func PullSecret(k8sClient k8sclient.Client, ocmConn *sdk.Connection, userID, ocmEmail string, notes *notewriter.NoteWriter) (Result, error) {
 	if _, err := pullsecret.GetPullSecret(k8sClient); err != nil {
 		return Result{}, fmt.Errorf("failed to get pull secret: %w", err)
@@ -48,7 +48,7 @@ func PullSecret(k8sClient k8sclient.Client, ocmConn *sdk.Connection, userID, ocm
 		return Result{
 			Done: true,
 			Actions: []types.Action{
-				executor.Silence("Pull secret is valid - no customer-side issue detected"),
+				executor.Escalate("Pull secret is valid - no customer-side issue detected"),
 			},
 		}, nil
 	}

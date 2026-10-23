@@ -15,10 +15,8 @@ import (
 
 type Investigation struct{}
 
-func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-
-	ctx := context.Background()
 
 	r, err := rb.WithCluster().WithManagementK8sClient().WithNotes().Build()
 	if err != nil {

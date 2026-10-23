@@ -19,7 +19,7 @@ import (
 
 type Investigation struct{}
 
-func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	r, err := rb.WithClusterDeployment().WithAwsClient().Build()
 	if err != nil {
@@ -54,7 +54,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	coList := &configv1.ClusterOperatorList{}
 	listOptions := &client.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{"metadata.name": "insights"})}
-	err = r.K8sClient.List(context.TODO(), coList, listOptions)
+	err = r.K8sClient.List(ctx, coList, listOptions)
 	if err != nil {
 		return result, investigation.WrapInfrastructure(
 			fmt.Errorf("unable to list insights clusteroperator: %w", err),

@@ -66,7 +66,7 @@ func getAcmHcpMustGatherImage() string {
 
 type Investigation struct{}
 
-func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 
 	r, err := rb.WithNotes().WithOC().WithK8sClient().WithRestConfig().WithManagementOCClient().WithManagementK8sClient().Build()
@@ -95,7 +95,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if r.IsHCP {
 		productName = productNameHCP
-		err = waitForMustGatherNamespaceDeletion(context.Background(), r.ManagementK8sClient, mustGatherWaitTimeout, mustGatherPollInterval)
+		err = waitForMustGatherNamespaceDeletion(ctx, r.ManagementK8sClient, mustGatherWaitTimeout, mustGatherPollInterval)
 		if err != nil {
 			logging.Errorf("CAD was unable to proceed with must-gather. Error: %v", err)
 			result.Actions = []types.Action{
@@ -154,7 +154,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Get SFTP credentials with retry logic to avoid re-running the must-gather
 	// on transient failures.
 	var username, token string
-	credCtx, credCancel := context.WithTimeout(context.Background(), sftpCredentialOverallTimeout)
+	credCtx, credCancel := context.WithTimeout(ctx, sftpCredentialOverallTimeout)
 	defer credCancel()
 	err = utils.WithRetriesContext(credCtx, sftpRetryAttempts, sftpRetryInitialBackoff, func() error {
 		attemptCtx, attemptCancel := context.WithTimeout(credCtx, sftpCredentialAttemptTimeout)
@@ -174,7 +174,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Upload with extended timeout - during testing, uploading to the SFTP server was very slow at 10 MB/min
 	// retry logic shares the overall timeout (6 hours), as to avoid multiple such long timeouts
 	// FIXME: As in improvement, CAD could use its own service account to upload to the SFTP server.
-	uploadCtx, uploadCancel := context.WithTimeout(context.Background(), sftpUploadOverallTimeout)
+	uploadCtx, uploadCancel := context.WithTimeout(ctx, sftpUploadOverallTimeout)
 	defer uploadCancel()
 	err = utils.WithRetriesContext(uploadCtx, sftpRetryAttempts, sftpRetryInitialBackoff, func() error {
 		return sftpUpload(uploadCtx, tarfile.Name(), username, token)
@@ -188,7 +188,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	r.Notes.AppendAutomation("CAD collected a must-gather and uploaded it to the Red Hat SFTP server under /anonymous/users/%s/%s", username, path.Base(tarfile.Name()))
 	metrics.Inc(metrics.MustGatherPerformed, c.Name(), productName)
 
-	appendFiringAlerts(r)
+	appendFiringAlerts(ctx, r)
 
 	result.Actions = executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), c.Name())
 	return result, nil
@@ -210,8 +210,8 @@ const (
 // appendFiringAlerts queries the cluster's Alertmanager for currently firing
 // alerts and appends them to the PD note. Failures are logged but do not block
 // the investigation since the must-gather has already been collected and uploaded.
-func appendFiringAlerts(r *investigation.Resources) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func appendFiringAlerts(ctx context.Context, r *investigation.Resources) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	cfg, err := getRestConfigForAlerts(r)
