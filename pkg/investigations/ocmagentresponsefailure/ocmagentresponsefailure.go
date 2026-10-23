@@ -10,6 +10,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/micro"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pullsecret"
@@ -32,10 +33,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	investigationResult := investigation.InvestigationResult{}
 	r, err := rb.WithNotes().WithAwsClient().WithK8sClient().WithClusterDeployment().Build()
 	if err != nil {
-		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
+		if cr := micro.ClusterAccessError(err, nil); cr.Done {
 			investigationResult.Actions = []types.Action{
-				executor.Note(msg),
-				executor.Escalate(msg),
+				executor.Note(cr.Value),
+				executor.Escalate(cr.Value),
 			}
 			return investigationResult, nil
 		}
@@ -75,12 +76,8 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	investigationResult.Actions = append(
 		investigationResult.Actions,
-		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name())...,
-	)
-
-	investigationResult.Actions = append(
-		investigationResult.Actions,
-		executor.Escalate("OCMAgentResponseFailureServiceLogsSRE investigation complete"),
+		executor.FinalizeResult(r.Notes, r.Cluster.ID(), i.Name(),
+			executor.Escalate("OCMAgentResponseFailureServiceLogsSRE investigation complete"))...,
 	)
 
 	return investigationResult, nil
@@ -104,11 +101,8 @@ func checkUserBanStatus(r *investigation.Resources) (checkResult, error) {
 		r.Notes.AppendWarning("%v", err)
 		actions = append(
 			actions,
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), r.Name)...,
-		)
-		actions = append(
-			actions,
-			executor.Escalate("Export Control Compliance ban detected, please refer to the SOP."),
+			executor.FinalizeResult(r.Notes, r.Cluster.ID(), r.Name,
+				executor.Escalate("Export Control Compliance ban detected, please refer to the SOP."))...,
 		)
 		return checkResult{actions: actions, stop: true}, nil
 	case errors.As(err, &userBannedErr):
@@ -117,7 +111,7 @@ func checkUserBanStatus(r *investigation.Resources) (checkResult, error) {
 		r.Notes.AppendWarning("%v", err)
 		actions = append(
 			actions,
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), r.Name)...,
+			executor.FinalizeResult(r.Notes, r.Cluster.ID(), r.Name)...,
 		)
 
 		// Remove this check once informing phase tests are concluded
@@ -142,11 +136,8 @@ func checkUserBanStatus(r *investigation.Resources) (checkResult, error) {
 		r.Notes.AppendWarning("encountered an issue when checking if the cluster owner is banned: %s\nPlease investigate.", err)
 		actions = append(
 			actions,
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), r.Name)...,
-		)
-		actions = append(
-			actions,
-			executor.Escalate("Failed to check if user is banned"),
+			executor.FinalizeResult(r.Notes, r.Cluster.ID(), r.Name,
+				executor.Escalate("Failed to check if user is banned"))...,
 		)
 		return checkResult{actions: actions, stop: true}, nil
 	}
@@ -173,11 +164,8 @@ func validateEgress(r *investigation.Resources) (checkResult, error) {
 		r.Notes.AppendWarning("Network verifier reported failure: %s", failureReason)
 		actions = append(
 			actions,
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), r.Name)...,
-		)
-		actions = append(
-			actions,
-			executor.Escalate("Egress network verifier failed. Please investigate."),
+			executor.FinalizeResult(r.Notes, r.Cluster.ID(), r.Name,
+				executor.Escalate("Egress network verifier failed. Please investigate."))...,
 		)
 		return checkResult{actions: actions, stop: true}, nil
 	case networkverifier.Success:
@@ -192,19 +180,16 @@ func validateEgress(r *investigation.Resources) (checkResult, error) {
 // It returns a set of actions, and a boolean indicating whether the investigation should halt
 func validatePullSecret(r *investigation.Resources) (checkResult, error) {
 	actions := []types.Action{}
-	user, err := r.OcmClient.GetCreatorFromCluster(r.Cluster)
+	creatorResult, err := micro.ClusterCreator(r.OcmClient, r.Cluster, r.Notes)
 	if err != nil {
-		r.Notes.AppendWarning("Failed getting cluster creator from ocm: %s", err)
 		actions = append(
 			actions,
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), r.Name)...,
-		)
-		actions = append(
-			actions,
-			executor.Escalate("Failed to get cluster creator from OCM"),
+			executor.FinalizeResult(r.Notes, r.Cluster.ID(), r.Name,
+				executor.Escalate("Failed to get cluster creator from OCM"))...,
 		)
 		return checkResult{actions: actions, stop: true}, nil
 	}
+	user := creatorResult.Value
 
 	logging.Infof("User ID is: %v", user.ID())
 
