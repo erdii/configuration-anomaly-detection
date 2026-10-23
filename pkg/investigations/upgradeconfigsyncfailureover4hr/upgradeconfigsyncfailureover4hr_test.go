@@ -5,12 +5,12 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	amv1 "github.com/openshift-online/ocm-sdk-go/accountsmgmt/v1"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	"go.uber.org/mock/gomock"
@@ -230,9 +230,12 @@ var _ = Describe("Run", func() {
 
 	When("user is banned due to export control", func() {
 		It("should escalate", func() {
+			account, _ := amv1.NewAccount().ID("user-1").
+				Banned(true).BanCode("export_control_compliance").
+				BanDescription("Export control").Build()
 			r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().
-				CheckIfUserBanned(gomock.Any()).
-				Return(ocm.UserBannedError{Code: "export_control_compliance"})
+				GetCreatorFromCluster(gomock.Any()).
+				Return(account, nil)
 
 			result, err := inv.Run(r)
 			Expect(err).NotTo(HaveOccurred())
@@ -243,9 +246,12 @@ var _ = Describe("Run", func() {
 
 	When("user is banned for other reasons", func() {
 		It("should send service log and silence", func() {
+			account, _ := amv1.NewAccount().ID("user-1").
+				Banned(true).BanCode("terms_and_conditions").
+				BanDescription("Terms violation").Build()
 			r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().
-				CheckIfUserBanned(gomock.Any()).
-				Return(ocm.UserBannedError{Code: "terms_and_conditions"})
+				GetCreatorFromCluster(gomock.Any()).
+				Return(account, nil)
 
 			result, err := inv.Run(r)
 			Expect(err).NotTo(HaveOccurred())
@@ -255,11 +261,11 @@ var _ = Describe("Run", func() {
 		})
 	})
 
-	When("ban check fails with unexpected error", func() {
+	When("GetCreatorFromCluster fails", func() {
 		It("should escalate", func() {
 			r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().
-				CheckIfUserBanned(gomock.Any()).
-				Return(fmt.Errorf("connection timeout"))
+				GetCreatorFromCluster(gomock.Any()).
+				Return(nil, fmt.Errorf("connection timeout"))
 
 			result, err := inv.Run(r)
 			Expect(err).NotTo(HaveOccurred())

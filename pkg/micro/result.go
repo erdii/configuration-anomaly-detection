@@ -1,10 +1,8 @@
 // Package micro provides reusable building blocks for investigations.
 //
-// Functions follow two conventions:
-//   - Pure checks (Check* prefix): no external calls, deterministic.
-//     They inspect already-fetched data and return a result with actions.
-//   - Fetching functions (noun phrases like ClusterCreator, PullSecret):
-//     make external calls (OCM, K8s) and return a result or error.
+// Naming convention:
+//   - Pure checks (no external calls): Check* prefix, return without error (e.g. CheckBan, ClusterAccessError)
+//   - Fetching functions (call OCM/K8s/etc): noun phrases, return with error (e.g. BannedUser, ClusterCreator, PullSecret)
 package micro
 
 import "github.com/openshift/configuration-anomaly-detection/pkg/types"
