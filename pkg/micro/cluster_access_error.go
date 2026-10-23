@@ -9,17 +9,22 @@ import (
 
 // ClusterAccessError checks whether a Build error is a known cluster access
 // issue and returns an escalation result if so. Pure — no external calls.
-func ClusterAccessError(err error, notes *notewriter.NoteWriter) Result {
+func ClusterAccessError(err error, notes *notewriter.NoteWriter) DataResult[string] {
 	msg, ok := investigation.ClusterAccessErrorMessage(err)
 	if !ok {
-		return Result{Done: false}
+		return DataResult[string]{}
 	}
 
-	notes.AppendWarning("%s", msg)
-	return Result{
-		Done: true,
-		Actions: []types.Action{
-			executor.Escalate(msg),
+	if notes != nil {
+		notes.AppendWarning("%s", msg)
+	}
+	return DataResult[string]{
+		Result: Result{
+			Done: true,
+			Actions: []types.Action{
+				executor.Escalate(msg),
+			},
 		},
+		Value: msg,
 	}
 }

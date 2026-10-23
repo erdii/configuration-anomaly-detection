@@ -24,6 +24,7 @@ import (
 	nodeutils "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/node"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/micro"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -85,11 +86,11 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	r, err := rb.WithCluster().WithK8sClient().Build()
 	if err != nil {
-		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
+		if cr := micro.ClusterAccessError(err, nil); cr.Done {
 			logging.Warnf("Cluster access error for %s: %v", i.Name(), err)
 			result.Actions = []types.Action{
-				executor.Note(msg),
-				executor.Escalate(msg),
+				executor.Note(cr.Value),
+				executor.Escalate(cr.Value),
 			}
 			return result, nil
 		}
@@ -110,8 +111,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			machineCIDR := r.Cluster.Network().MachineCIDR()
 			sl := newAllowedSourceRangesSL(machineCIDR)
 			notes.AppendAutomation("Sent AllowedSourceRanges service log and silenced alert")
-			result.Actions = append(
-				executor.NoteAndReportFrom(notes, r.Cluster.ID(), i.Name()),
+			result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), i.Name(),
 				executor.NewServiceLogAction(sl.Severity, sl.Summary).
 					WithDescription(sl.Description).
 					WithServiceName(sl.ServiceName).
@@ -159,8 +159,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 				fmt.Sprintf("The *.apps.%s DNS record is missing from Route53 hosted zones", clusterDomain),
 			)
 			notes.AppendAutomation("Sent NetworkMisconfiguration service log and silenced alert")
-			result.Actions = append(
-				executor.NoteAndReportFrom(notes, r.Cluster.ID(), i.Name()),
+			result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), i.Name(),
 				executor.NewServiceLogAction(sl.Severity, sl.Summary).
 					WithDescription(sl.Description).
 					WithServiceName(sl.ServiceName).
@@ -193,8 +192,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	// No automated root cause identified — escalate for manual investigation.
-	result.Actions = append(
-		executor.NoteAndReportFrom(notes, r.Cluster.ID(), i.Name()),
+	result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), i.Name(),
 		executor.Escalate("No automated root cause identified — manual investigation required"),
 	)
 	return result, nil

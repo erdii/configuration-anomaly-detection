@@ -10,6 +10,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/micro"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 
@@ -53,11 +54,11 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	r, err := rb.WithCluster().WithK8sClient().WithNotes().Build()
 	if err != nil {
-		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
+		if cr := micro.ClusterAccessError(err, nil); cr.Done {
 			logging.Warnf("Cluster access error for %s: %v", i.Name(), err)
 			result.Actions = []types.Action{
-				executor.Note(msg),
-				executor.Escalate(msg),
+				executor.Note(cr.Value),
+				executor.Escalate(cr.Value),
 			}
 			return result, nil
 		}
@@ -70,8 +71,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if len(stalledNodes) == 0 {
 		r.Notes.AppendSuccess("No nodes are stalled in draining state")
-		result.Actions = append(
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+		result.Actions = executor.FinalizeResult(r.Notes, r.Cluster.ID(), i.Name(),
 			executor.Escalate("No stalled node drains detected, but alert fired: manual review required"),
 		)
 		return result, nil
@@ -81,8 +81,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	unhealthyNodeCount := i.checkNodeHealth(ctx, r.K8sClient, r.Notes)
 	i.checkScalingAssessment(blockingPDBs, unhealthyNodeCount, r.Notes)
 
-	result.Actions = append(
-		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+	result.Actions = executor.FinalizeResult(r.Notes, r.Cluster.ID(), i.Name(),
 		executor.Escalate("PDB blocking node drain investigation: manual review required"),
 	)
 	return result, nil
