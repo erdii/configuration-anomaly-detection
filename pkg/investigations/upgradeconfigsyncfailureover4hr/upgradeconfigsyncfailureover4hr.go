@@ -46,21 +46,16 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	notes := notewriter.New(c.Name(), logging.RawLogger)
 	o := micro.NewOutcome(notes, r.Cluster.ID(), c.Name())
 
-	banResult, err := micro.BannedUser(r.OcmClient, r.Cluster, notes)
-	if err != nil {
-		logging.Errorf("Failed to check if user is banned: %v", err)
-		return o.Stop(executor.Escalate("Failed to check if user is banned")), nil
-	}
-	if banResult.Done {
-		return o.Stop(banResult.Actions...), nil
-	}
-
 	creatorResult, err := micro.ClusterCreator(r.OcmClient, r.Cluster, notes)
 	if err != nil {
 		logging.Errorf("Failed to get cluster creator from OCM: %v", err)
 		return o.Stop(executor.Escalate("Failed to get cluster creator from OCM")), nil
 	}
 	user := creatorResult.Value
+
+	if ban := micro.CheckBan(user, notes); ban.Done {
+		return o.Stop(ban.Actions...), nil
+	}
 
 	r, err = rb.WithK8sClient().Build()
 	if err != nil {

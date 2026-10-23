@@ -27,25 +27,20 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 	notes := notewriter.New(r.Name, logging.RawLogger)
 
-	user, err := r.OcmClient.GetCreatorFromCluster(r.Cluster)
+	creatorResult, err := micro.ClusterCreator(r.OcmClient, r.Cluster, notes)
 	if err != nil {
-		notes.AppendWarning("encountered an issue when checking if the cluster owner is banned: %s", err)
 		result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 			executor.Escalate("Failed to check user ban status - manual investigation required"),
 		)
 		return result, nil
 	}
 
-	if user.Banned() {
-		// Ban check uses account-level BanCode/BanDescription fields, not the ban API
-		// (ocmClient.CheckIfUserBanned), so micro.BannedUser cannot replace this.
-		notes.AppendWarning("User is banned: %s\nBan description: %s\nPlease open a proactive case, so that MCS can resolve the ban or organize a ownership transfer.", user.BanCode(), user.BanDescription())
+	banResult := micro.CheckBan(creatorResult.Value, notes)
+	if banResult.Done {
 		result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 			executor.Escalate("User is banned - proactive case required"),
 		)
 		return result, nil
-	} else {
-		notes.AppendSuccess("User is not banned.")
 	}
 
 	r, err = rb.WithK8sClient().Build()

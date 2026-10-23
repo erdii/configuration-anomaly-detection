@@ -3,7 +3,6 @@
 package ocmagentresponsefailure
 
 import (
-	"errors"
 	"os"
 	"strconv"
 
@@ -91,60 +90,42 @@ func (i *Investigation) Name() string {
 // It returns a set of actions, and a boolean indicating whether the investigation should halt
 func checkUserBanStatus(r *investigation.Resources) (checkResult, error) {
 	experimentalEnabled, _ := strconv.ParseBool(os.Getenv("CAD_EXPERIMENTAL_ENABLED"))
-	userBannedErr := ocm.UserBannedError{}
-	err := r.OcmClient.CheckIfUserBanned(r.Cluster)
-	actions := []types.Action{}
 
-	switch {
-	case errors.As(err, &userBannedErr) && userBannedErr.Code == "export_control_compliance":
-		// User is banned due to Export Control Compliance; escalate to SRE
-		r.Notes.AppendWarning("%v", err)
-		actions = append(
-			actions,
-			executor.FinalizeResult(r.Notes, r.Cluster.ID(), r.Name,
-				executor.Escalate("Export Control Compliance ban detected, please refer to the SOP."))...,
-		)
-		return checkResult{actions: actions, stop: true}, nil
-	case errors.As(err, &userBannedErr):
-		// User is banned, but not due to Export Control Compliance; Send a SL
-
-		r.Notes.AppendWarning("%v", err)
-		actions = append(
-			actions,
-			executor.FinalizeResult(r.Notes, r.Cluster.ID(), r.Name)...,
-		)
-
-		// Remove this check once informing phase tests are concluded
-		if experimentalEnabled {
-			sl := ocm.NewOCMBannedUserServiceLog()
-			actions = append(
-				actions,
-				executor.NewServiceLogAction(sl.Severity, sl.Summary).
-					WithDescription(sl.Description).
-					WithServiceName(sl.ServiceName).
-					Build(),
-			)
-		}
-
-		actions = append(
-			actions,
-			executor.Escalate("User is banned, please refer to the SOP."),
-		)
-		return checkResult{actions: actions, stop: true}, nil
-	case err != nil:
-		// Unhandled error; escalate to SRE
-		r.Notes.AppendWarning("encountered an issue when checking if the cluster owner is banned: %s\nPlease investigate.", err)
-		actions = append(
-			actions,
-			executor.FinalizeResult(r.Notes, r.Cluster.ID(), r.Name,
-				executor.Escalate("Failed to check if user is banned"))...,
-		)
+	creatorResult, err := micro.ClusterCreator(r.OcmClient, r.Cluster, r.Notes)
+	if err != nil {
+		actions := executor.FinalizeResult(r.Notes, r.Cluster.ID(), r.Name,
+			executor.Escalate("Failed to check if user is banned"))
 		return checkResult{actions: actions, stop: true}, nil
 	}
 
-	r.Notes.AppendSuccess("User is not banned.")
+	banResult := micro.CheckBan(creatorResult.Value, r.Notes)
+	if !banResult.Done {
+		return checkResult{stop: false}, nil
+	}
 
-	return checkResult{actions: actions, stop: false}, nil
+	if banResult.Value.Code == "export_control_compliance" {
+		actions := executor.FinalizeResult(r.Notes, r.Cluster.ID(), r.Name,
+			executor.Escalate("Export Control Compliance ban detected, please refer to the SOP."))
+		return checkResult{actions: actions, stop: true}, nil
+	}
+
+	// Non-export ban: finalize + conditional SL + escalate
+	actions := executor.FinalizeResult(r.Notes, r.Cluster.ID(), r.Name)
+
+	// Remove this check once informing phase tests are concluded
+	if experimentalEnabled {
+		sl := ocm.NewOCMBannedUserServiceLog()
+		actions = append(
+			actions,
+			executor.NewServiceLogAction(sl.Severity, sl.Summary).
+				WithDescription(sl.Description).
+				WithServiceName(sl.ServiceName).
+				Build(),
+		)
+	}
+
+	actions = append(actions, executor.Escalate("User is banned, please refer to the SOP."))
+	return checkResult{actions: actions, stop: true}, nil
 }
 
 // validateEgress checks the cluster can reach the required endpoints.

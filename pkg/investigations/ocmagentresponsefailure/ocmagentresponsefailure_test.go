@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
+	amv1 "github.com/openshift-online/ocm-sdk-go/accountsmgmt/v1"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
@@ -39,7 +39,6 @@ func Test_checkUserBanStatus(t *testing.T) {
 		experimentalEnabled bool
 	}{
 		{
-			// this will eventually send out a Service Log
 			name: "banned user",
 			want: investigation.InvestigationResult{
 				Actions: []types.Action{
@@ -49,12 +48,11 @@ func Test_checkUserBanStatus(t *testing.T) {
 				},
 			},
 			setupMocks: func(m *testMocks) {
+				account, _ := amv1.NewAccount().ID("user-1").
+					Banned(true).BanCode("some_reason").BanDescription("Some reason").Build()
 				m.ocmClient.EXPECT().
-					CheckIfUserBanned(m.cluster).
-					Return(ocm.UserBannedError{
-						Code:        "some_reason",
-						Description: "Some reason",
-					})
+					GetCreatorFromCluster(m.cluster).
+					Return(account, nil)
 			},
 		},
 		{
@@ -68,12 +66,11 @@ func Test_checkUserBanStatus(t *testing.T) {
 				},
 			},
 			setupMocks: func(m *testMocks) {
+				account, _ := amv1.NewAccount().ID("user-1").
+					Banned(true).BanCode("some_reason").BanDescription("Some reason").Build()
 				m.ocmClient.EXPECT().
-					CheckIfUserBanned(m.cluster).
-					Return(ocm.UserBannedError{
-						Code:        "some_reason",
-						Description: "Some reason",
-					})
+					GetCreatorFromCluster(m.cluster).
+					Return(account, nil)
 			},
 			experimentalEnabled: true,
 		},
@@ -87,12 +84,11 @@ func Test_checkUserBanStatus(t *testing.T) {
 				},
 			},
 			setupMocks: func(m *testMocks) {
+				account, _ := amv1.NewAccount().ID("user-1").
+					Banned(true).BanCode("export_control_compliance").BanDescription("Export Control Compliance").Build()
 				m.ocmClient.EXPECT().
-					CheckIfUserBanned(m.cluster).
-					Return(ocm.UserBannedError{
-						Code:        "export_control_compliance",
-						Description: "Export Control Compliance",
-					})
+					GetCreatorFromCluster(m.cluster).
+					Return(account, nil)
 			},
 		},
 		{
@@ -101,9 +97,10 @@ func Test_checkUserBanStatus(t *testing.T) {
 				Actions: []types.Action{},
 			},
 			setupMocks: func(m *testMocks) {
+				account, _ := amv1.NewAccount().ID("user-1").Banned(false).Build()
 				m.ocmClient.EXPECT().
-					CheckIfUserBanned(m.cluster).
-					Return(nil)
+					GetCreatorFromCluster(m.cluster).
+					Return(account, nil)
 			},
 		},
 	}
