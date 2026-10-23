@@ -59,7 +59,7 @@ var _ = Describe("parseMUOLogs", func() {
 		logs := `2026-10-19T10:00:00Z INFO starting operator
 2026-10-19T10:01:00Z ERROR Leader pod has been deleted, waiting for garbage collection
 2026-10-19T10:02:00Z INFO retrying`
-		parseMUOLogs(logs, notes)
+		parseMUOLogs(logs, "test-cluster-id", notes)
 		Expect(notes.String()).To(ContainSubstring("MUO deadlock detected"))
 	})
 
@@ -67,20 +67,20 @@ var _ = Describe("parseMUOLogs", func() {
 		logs := `2026-10-19T10:00:00Z INFO starting sync
 2026-10-19T10:01:00Z ERROR net/http: TLS handshake timeout
 2026-10-19T10:02:00Z INFO retrying`
-		parseMUOLogs(logs, notes)
+		parseMUOLogs(logs, "test-cluster-id", notes)
 		Expect(notes.String()).To(ContainSubstring("TLS handshake timeout"))
 	})
 
 	It("should detect ocm-config-getter errors", func() {
 		logs := `2026-10-19T10:00:00Z ERROR ocm-config-getter failed to retrieve config from OCM`
-		parseMUOLogs(logs, notes)
+		parseMUOLogs(logs, "test-cluster-id", notes)
 		Expect(notes.String()).To(ContainSubstring("ocm-config-getter"))
 	})
 
 	It("should detect multiple patterns", func() {
 		logs := `Leader pod has been deleted, waiting for garbage collection
 net/http: TLS handshake timeout`
-		parseMUOLogs(logs, notes)
+		parseMUOLogs(logs, "test-cluster-id", notes)
 		output := notes.String()
 		Expect(output).To(ContainSubstring("deadlock"))
 		Expect(output).To(ContainSubstring("TLS handshake"))
@@ -89,13 +89,30 @@ net/http: TLS handshake timeout`
 	It("should report success when no patterns found", func() {
 		logs := `2026-10-19T10:00:00Z INFO everything is fine
 2026-10-19T10:01:00Z INFO sync complete`
-		parseMUOLogs(logs, notes)
+		parseMUOLogs(logs, "test-cluster-id", notes)
 		Expect(notes.String()).To(ContainSubstring("No known error patterns"))
 	})
 
 	It("should handle empty logs", func() {
-		parseMUOLogs("", notes)
+		parseMUOLogs("", "test-cluster-id", notes)
 		Expect(notes.String()).To(ContainSubstring("No known error patterns"))
+	})
+
+	It("should return OHSS action for TLS handshake timeout", func() {
+		logs := `2026-10-19T10:01:00Z ERROR net/http: TLS handshake timeout`
+		actions := parseMUOLogs(logs, "test-cluster-id", notes)
+		Expect(actions).To(HaveLen(1))
+		ohss, ok := actions[0].(*executor.OHSSCaseAction)
+		Expect(ok).To(BeTrue())
+		Expect(ohss.ClusterID).To(Equal("test-cluster-id"))
+		Expect(ohss.Summary).To(ContainSubstring("TLS handshake timeout"))
+		Expect(ohss.Priority).To(Equal("Major"))
+	})
+
+	It("should return no actions when no OHSS-worthy patterns found", func() {
+		logs := `2026-10-19T10:00:00Z ERROR ocm-config-getter failed`
+		actions := parseMUOLogs(logs, "test-cluster-id", notes)
+		Expect(actions).To(BeEmpty())
 	})
 })
 
