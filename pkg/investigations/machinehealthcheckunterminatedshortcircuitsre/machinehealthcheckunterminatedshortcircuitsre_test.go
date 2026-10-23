@@ -666,7 +666,7 @@ func TestInvestigation_Run_SCPDisposition(t *testing.T) {
 			}
 
 			i := &Investigation{}
-			result, err := i.Run(rb)
+			result, err := i.Run(context.Background(), rb)
 			if err != nil {
 				t.Fatalf("unexpected error from Run(): %v", err)
 			}

@@ -55,7 +55,7 @@ func TestInvestigation_Run_BuildError(t *testing.T) {
 	}
 	inv := &Investigation{}
 
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	assert.Empty(t, result)
 	assert.Error(t, err)
 	assert.Equal(t, buildErr, err)
@@ -75,7 +75,7 @@ func TestInvestigation_Run_NonHCPCluster(t *testing.T) {
 	}
 	inv := &Investigation{}
 
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, result.Actions)
 
@@ -102,7 +102,7 @@ func TestInvestigation_Run_GetHostedClusterFails(t *testing.T) {
 	}
 	inv := &Investigation{}
 
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	assert.Empty(t, result)
 	assert.Error(t, err)
 	var infraErr investigation.InfrastructureError
@@ -140,7 +140,7 @@ func TestInvestigation_Run_Success(t *testing.T) {
 	}
 	inv := &Investigation{}
 
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.Empty(t, result.StopInvestigations)
 

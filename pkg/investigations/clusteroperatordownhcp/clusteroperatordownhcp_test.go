@@ -1,6 +1,7 @@
 package clusteroperatordownhcp
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -125,7 +126,7 @@ func TestInvestigation_Run_BuildError(t *testing.T) {
 	buildErr := errors.New("build failed")
 	rb := &investigation.ResourceBuilderMock{Resources: nil, BuildError: buildErr}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.Empty(t, result)
 	assert.Equal(t, buildErr, err)
 }
@@ -144,7 +145,7 @@ func TestInvestigation_Run_NonHCPEscalates(t *testing.T) {
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasEscalateAction(result.Actions), "non-HCP should escalate to a human")
 	assert.False(t, hasSilenceAction(result.Actions), "non-HCP must not silence")
@@ -170,7 +171,7 @@ func TestInvestigation_Run_NoStoppedMachineEscalates(t *testing.T) {
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasEscalateAction(result.Actions), "no stopped machine should escalate")
 	assert.False(t, hasServiceLogAction(result.Actions), "no service log when nothing is stopped")
@@ -193,7 +194,7 @@ func TestInvestigation_Run_EmptyMachineListEscalates(t *testing.T) {
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasEscalateAction(result.Actions), "empty machine list should escalate")
 	assert.False(t, hasServiceLogAction(result.Actions), "no service log on an empty list")
@@ -237,7 +238,7 @@ func TestInvestigation_Run_StoppedMachineSendsServiceLogAndSilences(t *testing.T
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasServiceLogAction(result.Actions), "stopped machine should send a service log")
 	assert.True(t, hasSilenceAction(result.Actions), "stopped machine should silence")
@@ -264,7 +265,7 @@ func TestInvestigation_Run_StoppedMachineWithoutInstanceIDEscalates(t *testing.T
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasEscalateAction(result.Actions), "stopped machine without an instance ID should escalate")
 	assert.False(t, hasServiceLogAction(result.Actions), "no service log without attribution")
@@ -311,7 +312,7 @@ func TestInvestigation_Run_TerminateEventIsNotAttribution(t *testing.T) {
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasEscalateAction(result.Actions), "a terminate event must not attribute a stop")
 	assert.False(t, hasServiceLogAction(result.Actions), "no service log from a terminate event")
@@ -348,7 +349,7 @@ func TestInvestigation_Run_UnattributedStopEscalates(t *testing.T) {
 		},
 	}
 
-	result, err := (&Investigation{}).Run(rb)
+	result, err := (&Investigation{}).Run(context.Background(), rb)
 	assert.NoError(t, err)
 	assert.True(t, hasEscalateAction(result.Actions), "unattributed stop should escalate")
 	assert.False(t, hasServiceLogAction(result.Actions), "no service log without CloudTrail attribution")

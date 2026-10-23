@@ -1,6 +1,7 @@
 package upgradeconfigsyncfailureover4hr
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -137,7 +138,7 @@ var _ = Describe("checkMUOConfig", func() {
 			},
 		}
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		err := checkMUOConfig(context.Background(), k8sClient, notes)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(notes.String()).To(ContainSubstring("ocmBaseUrl is correct"))
 	})
@@ -155,7 +156,7 @@ var _ = Describe("checkMUOConfig", func() {
 			},
 		}
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		err := checkMUOConfig(context.Background(), k8sClient, notes)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(notes.String()).To(ContainSubstring("wrong.example.com"))
 		Expect(notes.String()).To(ContainSubstring(expectedOCMBase))
@@ -163,7 +164,7 @@ var _ = Describe("checkMUOConfig", func() {
 
 	It("should error when configmap not found", func() {
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		err := checkMUOConfig(context.Background(), k8sClient, notes)
 		Expect(err).To(HaveOccurred())
 		Expect(notes.String()).To(ContainSubstring("Failed to read MUO configmap"))
 	})
@@ -179,7 +180,7 @@ var _ = Describe("checkMUOConfig", func() {
 			},
 		}
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		err := checkMUOConfig(context.Background(), k8sClient, notes)
 		Expect(err).To(HaveOccurred())
 		Expect(notes.String()).To(ContainSubstring("missing 'config.yaml' key"))
 	})
@@ -195,7 +196,7 @@ var _ = Describe("checkMUOConfig", func() {
 			},
 		}
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		err := checkMUOConfig(context.Background(), k8sClient, notes)
 		Expect(err).To(HaveOccurred())
 		Expect(notes.String()).To(ContainSubstring("Failed to parse MUO config"))
 	})
@@ -237,7 +238,7 @@ var _ = Describe("Run", func() {
 				GetCreatorFromCluster(gomock.Any()).
 				Return(account, nil)
 
-			result, err := inv.Run(r)
+			result, err := inv.Run(context.Background(), r)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 			Expect(hasSilenceAction(result.Actions)).To(BeFalse())
@@ -253,7 +254,7 @@ var _ = Describe("Run", func() {
 				GetCreatorFromCluster(gomock.Any()).
 				Return(account, nil)
 
-			result, err := inv.Run(r)
+			result, err := inv.Run(context.Background(), r)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(hasServiceLogAction(result.Actions)).To(BeTrue())
 			Expect(hasSilenceAction(result.Actions)).To(BeTrue())
@@ -267,7 +268,7 @@ var _ = Describe("Run", func() {
 				GetCreatorFromCluster(gomock.Any()).
 				Return(nil, fmt.Errorf("connection timeout"))
 
-			result, err := inv.Run(r)
+			result, err := inv.Run(context.Background(), r)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 			Expect(hasSilenceAction(result.Actions)).To(BeFalse())
@@ -278,7 +279,7 @@ var _ = Describe("Run", func() {
 		It("should propagate the error", func() {
 			r.BuildError = fmt.Errorf("infrastructure error: resource build failed")
 
-			_, err := inv.Run(r)
+			_, err := inv.Run(context.Background(), r)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("infrastructure error"))
 		})

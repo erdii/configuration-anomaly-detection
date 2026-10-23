@@ -1,6 +1,7 @@
 package cannotretrieveupdatessre
 
 import (
+	"context"
 	"fmt"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -18,7 +19,7 @@ import (
 type Investigation struct{}
 
 // Run executes the investigation for the CannotRetrieveUpdatesSRE alert
-func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	r, err := rb.WithAwsClient().WithClusterDeployment().Build()
 	if err != nil {

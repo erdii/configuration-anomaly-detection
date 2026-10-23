@@ -40,8 +40,7 @@ type SnapshotResult struct {
 	Namespace    string
 }
 
-func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
-	ctx := context.TODO()
+func (i *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 
 	r, err := rb.

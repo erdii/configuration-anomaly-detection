@@ -64,7 +64,7 @@ const available = "Available"
 
 type Investigation struct{}
 
-func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigation.InvestigationResult, err error) {
+func (c *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (result investigation.InvestigationResult, err error) {
 	r, err := rb.WithK8sClient().Build()
 	if err != nil {
 		if cr := micro.ClusterAccessError(err, nil); cr.Done {
@@ -81,7 +81,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 	// List the monitoring cluster operator
 	coList := &configv1.ClusterOperatorList{}
 	listOptions := &client.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{"metadata.name": "monitoring"})}
-	err = r.K8sClient.List(context.TODO(), coList, listOptions)
+	err = r.K8sClient.List(ctx, coList, listOptions)
 	if err != nil {
 		return result, investigation.WrapInfrastructure(
 			fmt.Errorf("unable to list monitoring clusteroperator: %w", err),

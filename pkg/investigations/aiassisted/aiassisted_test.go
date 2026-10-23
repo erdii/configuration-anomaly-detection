@@ -1,6 +1,7 @@
 package aiassisted
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -106,7 +107,7 @@ var _ = Describe("aiassisted", func() {
 				r.Resources.IsInfrastructureCluster = true
 
 				inv := Investigation{}
-				result, err := inv.Run(r)
+				result, err := inv.Run(context.Background(), r)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
@@ -118,7 +119,7 @@ var _ = Describe("aiassisted", func() {
 		Context("when AI runtime configuration is nil", func() {
 			It("should escalate with configuration warning", func() {
 				inv := Investigation{}
-				result, err := inv.Run(r)
+				result, err := inv.Run(context.Background(), r)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
@@ -156,7 +157,7 @@ var _ = Describe("aiassisted", func() {
 						TimeoutSeconds: 0,
 					},
 				}
-				result, err := inv.Run(r)
+				result, err := inv.Run(context.Background(), r)
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())

@@ -36,9 +36,8 @@ const awsMachineStopped = "stopped"
 // event is read as a stop — a termination says nothing about who stopped it.
 const stopInstancesEventName = "StopInstances"
 
-func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	ctx := context.Background()
 
 	// ClusterOperatorDown also fires on classic clusters, so the AWS client is not
 	// built here: it authenticates into the customer's AWS account and is only

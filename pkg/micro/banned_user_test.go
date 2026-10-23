@@ -11,8 +11,8 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/micro"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	"go.uber.org/mock/gomock"
 )
 

@@ -1,6 +1,7 @@
 package precheck
 
 import (
+	"context"
 	"errors"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -16,7 +17,7 @@ type ClusterStatePrecheck struct{}
 // - the cluster's state is supported by CAD for an investigation (= not uninstalling)
 // - the cloud provider is supported by CAD (cluster is AWS)
 // Performs according pagerduty actions and returns whether CAD needs to investigate the cluster
-func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *ClusterStatePrecheck) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	r, err := rb.WithCluster().Build()
 	if err != nil {

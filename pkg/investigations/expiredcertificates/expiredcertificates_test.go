@@ -460,7 +460,7 @@ func TestRun_HealthyCluster(t *testing.T) {
 	}
 
 	inv := &Investigation{}
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -478,7 +478,7 @@ func TestRun_ClusterAccessError(t *testing.T) {
 	}
 
 	inv := &Investigation{}
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	if err != nil {
 		t.Fatalf("cluster access errors should not return an error, got: %v", err)
 	}
@@ -493,7 +493,7 @@ func TestRun_BuildError(t *testing.T) {
 	}
 
 	inv := &Investigation{}
-	_, err := inv.Run(rb)
+	_, err := inv.Run(context.Background(), rb)
 	if err == nil {
 		t.Fatal("expected an error for non-cluster-access build failures")
 	}
@@ -522,7 +522,7 @@ func TestRun_HCPCluster(t *testing.T) {
 	}
 
 	inv := &Investigation{}
-	result, err := inv.Run(rb)
+	result, err := inv.Run(context.Background(), rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

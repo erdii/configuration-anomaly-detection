@@ -58,8 +58,7 @@ type Investigation struct {
 // The machine object is evaluated first, as it represents a lower-level object that could affect the health of the node.
 // If the investigation determines that the breakage is occurring at the machine-level, the corresponding node is *not* investigated.
 // After investigating all affected machines, potentially affected nodes are investigated.
-func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
-	ctx := context.Background()
+func (i *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	r, err := rb.WithK8sClient().WithCluster().WithNotes().Build()
 	if err != nil {

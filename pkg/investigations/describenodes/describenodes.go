@@ -34,8 +34,7 @@ type Investigation struct {
 // Node selection is controlled via Params (passed via --params flags):
 // flags (MASTER, INFRA, WORKER) can be combined. If no params are provided,
 // all nodes are described.
-func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
-	ctx := context.Background()
+func (i *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 
 	r, err := rb.WithCluster().WithK8sClient().Build()

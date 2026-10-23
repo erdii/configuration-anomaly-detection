@@ -389,7 +389,7 @@ func (c *investigationRunner) runChain(
 		}
 
 		logging.Infof("Running investigation %q", inv.Name())
-		result, attempts, runErr := runInvestigationWithRetry(inv, builder)
+		result, attempts, runErr := runInvestigationWithRetry(ctx, inv, builder)
 		if runErr != nil {
 			cleanupBuilder(builder)
 			return fmt.Errorf("investigation %q failed after %d attempt(s): %w", inv.Name(), attempts, runErr)
@@ -465,6 +465,7 @@ func cleanupBuilder(builder investigation.ResourceBuilder) {
 // It retries up to maxInvestigationRetries times with exponential backoff for InfrastructureErrors.
 // Returns the result, the number of attempts made, and the final error.
 func runInvestigationWithRetry(
+	ctx context.Context,
 	inv investigation.Investigation,
 	builder investigation.ResourceBuilder,
 ) (investigation.InvestigationResult, int, error) {
@@ -474,7 +475,7 @@ func runInvestigationWithRetry(
 	maxAttempts := maxInvestigationRetries + 1
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, err = inv.Run(builder)
+		result, err = inv.Run(ctx, builder)
 
 		if err == nil { // Success
 			if attempt > 1 {

@@ -1,6 +1,7 @@
 package precheck
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -177,7 +178,7 @@ func TestInvestigation_Run(t *testing.T) {
 			}
 
 			c := &ClusterStatePrecheck{}
-			got, err := c.Run(tt.args.rb)
+			got, err := c.Run(context.Background(), tt.args.rb)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Investigation.Run() error = %v, wantErr %v", err, tt.wantErr)
 				return

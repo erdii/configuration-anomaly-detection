@@ -38,7 +38,7 @@ type muoConfig struct {
 
 type Investigation struct{}
 
-func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	r, err := rb.WithCluster().Build()
 	if err != nil {
 		return investigation.InvestigationResult{}, err
@@ -64,11 +64,11 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return investigation.InvestigationResult{}, investigation.WrapInfrastructure(err, "Resource build error")
 	}
 
-	if err := checkMUOConfig(r.K8sClient, notes); err != nil {
+	if err := checkMUOConfig(ctx, r.K8sClient, notes); err != nil {
 		logging.Warnf("Failed to validate MUO config: %v", err)
 	}
 
-	muoActions, err := checkMUOLogs(r.K8sClient, r.Cluster.ID(), notes)
+	muoActions, err := checkMUOLogs(ctx, r.K8sClient, r.Cluster.ID(), notes)
 	if err != nil {
 		logging.Warnf("Failed to read MUO logs: %v", err)
 		notes.AppendWarning("MUO log analysis skipped: %v", err)
@@ -87,9 +87,9 @@ func (c *Investigation) Name() string {
 	return "upgradeconfigsyncfailureover4hr"
 }
 
-func checkMUOConfig(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) error {
+func checkMUOConfig(ctx context.Context, k8sClient k8sclient.Client, notes *notewriter.NoteWriter) error {
 	cm := &corev1.ConfigMap{}
-	err := k8sClient.Get(context.TODO(), k8stypes.NamespacedName{
+	err := k8sClient.Get(ctx, k8stypes.NamespacedName{
 		Namespace: muoNamespace,
 		Name:      muoConfigMapName,
 	}, cm)
@@ -119,9 +119,7 @@ func checkMUOConfig(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) er
 	return nil
 }
 
-func checkMUOLogs(k8sClient k8sclient.Client, clusterID string, notes *notewriter.NoteWriter) ([]types.Action, error) {
-	ctx := context.TODO()
-
+func checkMUOLogs(ctx context.Context, k8sClient k8sclient.Client, clusterID string, notes *notewriter.NoteWriter) ([]types.Action, error) {
 	podList := &corev1.PodList{}
 	if err := k8sClient.List(ctx, podList,
 		client.InNamespace(muoNamespace),

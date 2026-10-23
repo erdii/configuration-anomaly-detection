@@ -3,6 +3,7 @@
 package ocmagentresponsefailure
 
 import (
+	"context"
 	"os"
 	"strconv"
 
@@ -28,7 +29,7 @@ type checkResult struct {
 	stop    bool
 }
 
-func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (i *Investigation) Run(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	investigationResult := investigation.InvestigationResult{}
 	r, err := rb.WithNotes().WithAwsClient().WithK8sClient().WithClusterDeployment().Build()
 	if err != nil {

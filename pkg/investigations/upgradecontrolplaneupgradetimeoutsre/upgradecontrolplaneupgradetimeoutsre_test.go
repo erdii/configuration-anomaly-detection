@@ -126,7 +126,7 @@ func runWith(t *testing.T, res *investigation.Resources) (investigation.Investig
 	res.Cluster = cluster
 	res.Notes = notewriter.New(investigationName, logging.RawLogger)
 
-	result, err := (&Investigation{}).Run(&investigation.ResourceBuilderMock{Resources: res})
+	result, err := (&Investigation{}).Run(context.Background(), &investigation.ResourceBuilderMock{Resources: res})
 	require.NoError(t, err)
 	return result, res.Notes.String()
 }
