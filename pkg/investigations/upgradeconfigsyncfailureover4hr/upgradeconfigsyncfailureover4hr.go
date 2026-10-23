@@ -19,6 +19,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/micro"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 const (
@@ -71,10 +72,12 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		logging.Warnf("Failed to validate MUO config: %v", err)
 	}
 
-	if err := checkMUOLogs(r.K8sClient, notes); err != nil {
+	muoActions, err := checkMUOLogs(r.K8sClient, r.Cluster.ID(), notes)
+	if err != nil {
 		logging.Warnf("Failed to read MUO logs: %v", err)
 		notes.AppendWarning("MUO log analysis skipped: %v", err)
 	}
+	o.Collect(muoActions...)
 
 	psResult, err := micro.PullSecret(r.K8sClient, r.OcmClient.GetConnection(), user.ID(), user.Email(), notes)
 	if err != nil {
@@ -120,7 +123,7 @@ func checkMUOConfig(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) er
 	return nil
 }
 
-func checkMUOLogs(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) error {
+func checkMUOLogs(k8sClient k8sclient.Client, clusterID string, notes *notewriter.NoteWriter) ([]types.Action, error) {
 	ctx := context.TODO()
 
 	podList := &corev1.PodList{}
@@ -129,22 +132,22 @@ func checkMUOLogs(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) erro
 		client.MatchingLabels{"name": muoDeploymentName},
 	); err != nil {
 		notes.AppendWarning("Failed to list MUO pods: %v", err)
-		return err
+		return nil, err
 	}
 
 	if len(podList.Items) == 0 {
 		notes.AppendWarning("No MUO pods found in %s", muoNamespace)
-		return fmt.Errorf("no MUO pods found")
+		return nil, fmt.Errorf("no MUO pods found")
 	}
 
 	restConfig, err := k8sclient.GetRestConfig(k8sClient)
 	if err != nil {
-		return fmt.Errorf("failed to get REST config: %w", err)
+		return nil, fmt.Errorf("failed to get REST config: %w", err)
 	}
 
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
+		return nil, fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
 
 	pod := &podList.Items[0]
@@ -157,39 +160,58 @@ func checkMUOLogs(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) erro
 	logStream, err := req.Stream(ctx)
 	if err != nil {
 		notes.AppendWarning("Failed to read MUO pod logs: %v", err)
-		return err
+		return nil, err
 	}
 	defer logStream.Close()
 
 	buf := new(strings.Builder)
 	if _, err := io.Copy(buf, logStream); err != nil {
-		return fmt.Errorf("failed to read log stream: %w", err)
+		return nil, fmt.Errorf("failed to read log stream: %w", err)
 	}
 
-	logs := buf.String()
-	parseMUOLogs(logs, notes)
-	return nil
+	return parseMUOLogs(buf.String(), clusterID, notes), nil
 }
 
-func parseMUOLogs(logs string, notes *notewriter.NoteWriter) {
+func parseMUOLogs(logs, clusterID string, notes *notewriter.NoteWriter) []types.Action {
 	knownPatterns := []struct {
 		pattern string
 		message string
+		ohss    bool
 	}{
-		{"Leader pod has been deleted, waiting for garbage collection", "MUO deadlock detected (leader election): scale down/up MUO deployment to recover"},
-		{"net/http: TLS handshake timeout", "TLS handshake timeout detected (possible ML-KEM incompatibility): check SOP for OHSS escalation"},
-		{"ocm-config-getter", "MUO ocm-config-getter errors found: check OCM connectivity and MUO config"},
+		{"Leader pod has been deleted, waiting for garbage collection", "MUO deadlock detected (leader election): scale down/up MUO deployment to recover", false},
+		{"net/http: TLS handshake timeout", "TLS handshake timeout detected (possible ML-KEM incompatibility)", true},
+		{"ocm-config-getter", "MUO ocm-config-getter errors found: check OCM connectivity and MUO config", false},
 	}
 
+	var actions []types.Action
 	found := false
 	for _, p := range knownPatterns {
-		if strings.Contains(logs, p.pattern) {
-			notes.AppendWarning("MUO logs: %s", p.message)
-			found = true
+		if !strings.Contains(logs, p.pattern) {
+			continue
+		}
+		notes.AppendWarning("MUO logs: %s", p.message)
+		found = true
+
+		if p.ohss {
+			actions = append(actions, executor.NewOHSSCaseAction(
+				fmt.Sprintf("UpgradeConfigSyncFailure: %s on cluster %s", p.message, clusterID),
+			).
+				WithDescription(fmt.Sprintf(
+					"CAD detected '%s' in managed-upgrade-operator logs on cluster %s.\n\n"+
+						"Please refer to the UpgradeConfigSyncFailure SOP for remediation steps.",
+					p.pattern, clusterID,
+				)).
+				ForCluster(clusterID).
+				WithPriority("Major").
+				WithReason(p.message).
+				Build(),
+			)
 		}
 	}
 
 	if !found {
 		notes.AppendSuccess("No known error patterns found in MUO logs")
 	}
+
+	return actions
 }
