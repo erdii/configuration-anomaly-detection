@@ -11,9 +11,9 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/micro"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	"k8s.io/apimachinery/pkg/fields"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -67,10 +67,8 @@ type Investigation struct{}
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigation.InvestigationResult, err error) {
 	r, err := rb.WithK8sClient().Build()
 	if err != nil {
-		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
-			result.Actions = []types.Action{
-				executor.Escalate(msg),
-			}
+		if cr := micro.ClusterAccessError(err, nil); cr.Done {
+			result.Actions = cr.Actions
 			return result, nil
 		}
 		return result, err
@@ -93,8 +91,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 	// Make sure our list output only finds a single cluster operator for `metadata.name = monitoring`
 	if len(coList.Items) != 1 {
 		notes.AppendWarning("Found %d monitoring clusteroperators, expected 1", len(coList.Items))
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+		result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 			executor.Escalate("Unexpected monitoring clusteroperator count - manual investigation required"),
 		)
 		return result, nil
@@ -110,8 +107,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 		notes.AppendWarning("Customer misconfigured the UWM configmap")
 		configMapSL := newUwmConfigMapMisconfiguredSL(monitoringDocLink)
 
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+		result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 			executor.NewServiceLogAction(configMapSL.Severity, configMapSL.Summary).
 				WithDescription(configMapSL.Description).
 				WithServiceName(configMapSL.ServiceName).
@@ -125,8 +121,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 		notes.AppendWarning("Customer misconfigured the UWM (UpdatingUserWorkloadAlertmanager)")
 		alertManagerSL := newUwmAMMisconfiguredSL(monitoringDocLink)
 
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+		result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 			executor.NewServiceLogAction(alertManagerSL.Severity, alertManagerSL.Summary).
 				WithDescription(alertManagerSL.Description).
 				WithServiceName(alertManagerSL.ServiceName).
@@ -140,8 +135,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 		notes.AppendWarning("Customer misconfigured the UWM (UpdatingUserWorkloadPrometheus)")
 		genericSL := newUwmGenericMisconfiguredSL(monitoringDocLink)
 
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+		result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 			executor.NewServiceLogAction(genericSL.Severity, genericSL.Summary).
 				WithDescription(genericSL.Description).
 				WithServiceName(genericSL.ServiceName).
@@ -154,8 +148,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 	// The UWM configmap is valid, an SRE will need to manually investigate this alert.
 	// Escalate the alert with our findings.
 	notes.AppendSuccess("Monitoring CO not degraded due to UWM misconfiguration")
-	result.Actions = append(
-		executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+	result.Actions = executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(),
 		executor.Escalate("Monitoring CO not degraded due to UWM misconfiguration - manual investigation required"),
 	)
 	return result, nil
