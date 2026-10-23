@@ -3,6 +3,7 @@ package types
 import (
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
+	"github.com/openshift/configuration-anomaly-detection/pkg/jira"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
@@ -18,6 +19,7 @@ type ExecutionContext struct {
 	OCMClient       ocm.Client
 	PDClient        pagerduty.Client
 	BackplaneClient backplane.Client
+	JiraClient      jira.Client
 
 	// NoteWriter for appending action results to notes
 	Notes *notewriter.NoteWriter

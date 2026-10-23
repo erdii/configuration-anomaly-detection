@@ -33,6 +33,7 @@ func (e *DefaultExecutor) executeSequential(
 			OCMClient:         execCtx.OCMClient,
 			PDClient:          execCtx.PDClient,
 			BackplaneClient:   execCtx.BackplaneClient,
+			JiraClient:        execCtx.JiraClient,
 			Notes:             execCtx.Notes,
 			InvestigationName: execCtx.InvestigationName,
 			Logger:            actionLogger,
@@ -86,9 +87,10 @@ func (e *DefaultExecutor) executeConcurrent(
 	}
 
 	var (
-		pdActions  []actionWithIndex
-		ocmActions []actionWithIndex
-		bpActions  []actionWithIndex
+		pdActions   []actionWithIndex
+		ocmActions  []actionWithIndex
+		bpActions   []actionWithIndex
+		jiraActions []actionWithIndex
 	)
 
 	for i, action := range actions {
@@ -100,6 +102,8 @@ func (e *DefaultExecutor) executeConcurrent(
 			ocmActions = append(ocmActions, actionWithIndex{action, i})
 		case string(ActionTypeBackplaneReport):
 			bpActions = append(bpActions, actionWithIndex{action, i})
+		case string(ActionTypeOHSSCase):
+			jiraActions = append(jiraActions, actionWithIndex{action, i})
 		}
 	}
 
@@ -112,6 +116,9 @@ func (e *DefaultExecutor) executeConcurrent(
 			logDryRunAction(a.action, execCtx.Logger)
 		}
 		for _, a := range bpActions {
+			logDryRunAction(a.action, execCtx.Logger)
+		}
+		for _, a := range jiraActions {
 			logDryRunAction(a.action, execCtx.Logger)
 		}
 		return nil
@@ -140,6 +147,20 @@ func (e *DefaultExecutor) executeConcurrent(
 	}
 
 	for _, a := range ocmActions {
+		phase1.Add(1)
+		go func(a actionWithIndex) {
+			defer phase1.Done()
+			if err := e.executeWithRetry(ctx, a.action, execCtx, opts.MaxRetries); err != nil {
+				errorsChan <- ActionExecutionError{
+					ActionType: ActionType(a.action.Type()),
+					Attempt:    opts.MaxRetries + 1,
+					Err:        err,
+				}
+			}
+		}(a)
+	}
+
+	for _, a := range jiraActions {
 		phase1.Add(1)
 		go func(a actionWithIndex) {
 			defer phase1.Done()
@@ -302,6 +323,9 @@ func logDryRunAction(action Action, logger *zap.SugaredLogger) {
 	case *BackplaneReportAction:
 		logger.Infof("DRY RUN: Would create backplane report - ClusterID: %s, Summary: %s",
 			a.ClusterID, a.Summary)
+	case *OHSSCaseAction:
+		logger.Infof("DRY RUN: Would create OHSS case - Summary: %s, ClusterID: %s, Priority: %s",
+			a.Summary, a.ClusterID, a.Priority)
 	default:
 		logger.Infof("DRY RUN: Would execute action %s", action.Type())
 	}
