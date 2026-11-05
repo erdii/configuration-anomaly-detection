@@ -2,7 +2,7 @@
 
 ## Alert Definitions
 
-Source: `app-interface/resources/observability/prometheusrules/osd-fleet-manager-production.prometheusrules.yaml.j2`
+Source: [`osd-fleet-manager-production.prometheusrules.yaml.j2`](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/resources/observability/prometheusrules/osd-fleet-manager-production.prometheusrules.yaml.j2)
 
 | Alert | Severity | Pages SREP? |
 |-------|----------|-------------|
@@ -27,13 +27,13 @@ Source: `app-interface/resources/observability/prometheusrules/osd-fleet-manager
 
 ## Alertmanager Routing
 
-Source: `app-interface/resources/observability/alertmanager/alertmanager-instance.secret.yaml` (lines 1452-1478)
+Source: [`alertmanager-instance.secret.yaml`](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/resources/observability/alertmanager/alertmanager-instance.secret.yaml) (lines 1452-1478)
 
 Match: `service: osd-fleet-manager`
 
 | Severity | Environment | Receiver | Channel/Target |
 |----------|-------------|----------|----------------|
-| critical | production | `pagerduty-srep` | SREP pager (`PA4586M`) |
+| critical | production | `pagerduty-srep` | SREP pager ([`PA4586M`](https://redhat.pagerduty.com/escalation_policies/PA4586M)) |
 | critical | any | `slack-osd-fm-alerts` | `#osd-fm-alerts` |
 | high | any | `slack-osd-fm-alerts` | `#osd-fm-alerts` |
 | high | production | `slack-srep-alerts` | `#sd-sre-platform-alerts` |
@@ -41,4 +41,4 @@ Match: `service: osd-fleet-manager`
 
 ## Key Observation
 
-OSD FM critical production alerts route to `pagerduty-srep` (SREP pager, policy `PA4586M`), **not** to the SLSRE escalation policy. With most SLSRE members joining SREP, this routing already matches the target state.
+OSD FM critical production alerts route to `pagerduty-srep` (SREP pager, policy [`PA4586M`](https://redhat.pagerduty.com/escalation_policies/PA4586M)), **not** to the SLSRE escalation policy. With most SLSRE members joining SREP, this routing already matches the target state.

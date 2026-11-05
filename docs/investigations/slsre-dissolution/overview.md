@@ -6,39 +6,43 @@ The SLSRE team is being dissolved. Most members join two SRE teams on the SREP p
 
 ## Escalation Policies
 
-| Name | ID | Used By | Status |
-|------|----|---------|--------|
-| SLSRE Escalation Policy | `PGASVAO` | Nothing (orphaned) | **Remove** |
-| SRE Platform (SREP) | `PA4586M` | OSD FM, Hive, HyperShift-DNS01, ROSA-HCP Log Forwarder | Active — no change needed |
-| MT-SRE | `PQSWOFV` | MT-SRE general escalation, RHMI next-escalation | Active |
-| RHOAM Production | `PU1EH5A` | RHOAM + RHOAMI per-cluster alerts (pagerduty-operator) | Active — update ownership |
-| RHOAM Stage | `P8O758S` | RHOAM + RHOAMI stage per-cluster alerts | Active — update ownership |
+| PD Name | ID | Used By | Status |
+|---------|----|---------|--------|
+| Service Lifecycle On-Call | [`PGASVAO`](https://redhat.pagerduty.com/escalation_policies/PGASVAO) | [Service Lifecycle SRE](https://redhat.pagerduty.com/services/PESM5LA) (1,159 incidents/yr — ACM alerts), no alertmanager routes | Active — **not orphaned**, needs ACM alert migration |
+| OpenShift Escalation Policy (SREP) | [`PA4586M`](https://redhat.pagerduty.com/escalation_policies/PA4586M) | OSD FM, Hive, HyperShift-DNS01, ROSA-HCP Log Forwarder (1,750 incidents/yr) | Active — no change needed |
+| MT-SRE | [`PQSWOFV`](https://redhat.pagerduty.com/escalation_policies/PQSWOFV) | Referenced in app-interface as RHMI next-escalation | **404 in PD — deleted or ID wrong** |
+| [LP-SRE] RHOAM | [`PU1EH5A`](https://redhat.pagerduty.com/escalation_policies/PU1EH5A) | 23 services: RHOAM/RHOAMI per-cluster, CSSRE RHOAM (59/yr), CSSRE RHOSAK (7/yr), DMS | Active — update ownership |
+| rhmi-dev (RHOAM Stage) | [`P8O758S`](https://redhat.pagerduty.com/escalation_policies/P8O758S) | 18 stage dev-cluster services | Active — update ownership |
 
 ## Schedules
 
-| Name | ID | Team |
-|------|----|------|
-| LP-SRE Primary | `P8N1PPP` | LP-SRE |
-| LP-SRE Secondary | `PRY7RU4` | LP-SRE |
+| PD Name | ID | Shared By |
+|---------|----|-----------|
+| Layered Products Primary | [`P8N1PPP`](https://redhat.pagerduty.com/schedules/P8N1PPP) | 6 EPs: [LP-SRE] RHOAM, [LP-SRE] Layered Products Misc, RHACS Cloud Services, Layered Products Oncall, [LP-SRE] ACM - Hybrid, Service Lifecycle On-Call |
+| Layered Products Secondary | [`PRY7RU4`](https://redhat.pagerduty.com/schedules/PRY7RU4) | LP-SRE |
 
 ## All Alert Routes
 
 ### Centralized Alertmanager (observability)
 
+Source: [`alertmanager-instance.secret.yaml`](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/resources/observability/alertmanager/alertmanager-instance.secret.yaml)
+
 | Service | Severity | PagerDuty Receiver | Escalation Policy | Slack |
 |---------|----------|-------------------|-------------------|-------|
-| `osd-fleet-manager` | critical + production | `pagerduty-srep` | `PA4586M` (SREP) | `#osd-fm-alerts` |
+| `osd-fleet-manager` | critical + production | `pagerduty-srep` | [`PA4586M`](https://redhat.pagerduty.com/escalation_policies/PA4586M) (SREP) | `#osd-fm-alerts` |
 | `osd-fleet-manager` | high + production | — | — | `#sd-sre-platform-alerts` |
 | `osd-fleet-manager` | high | — | — | `#osd-fm-alerts` |
 | `osd-fleet-manager` | warning/medium/info | — | — | `#osd-fm-info` |
-| `hive-srep` | critical (team=srep) | `pagerduty-srep` | `PA4586M` (SREP) | `#hive-alerts` |
-| `hive-srep` | high (team=srep) | `pagerduty-srep` | `PA4586M` (SREP) | — |
-| `hypershift-dns01-monitoring` | critical | `pagerduty-srep` | `PA4586M` (SREP) | `#sd-sre-platform-alerts` |
-| `rosa-hcp-log-forwarder` | critical/high + production | `pagerduty-srep` | `PA4586M` (SREP) | `#sd-sre-platform-alerts` |
+| `hive-srep` | critical (team=srep) | `pagerduty-srep` | [`PA4586M`](https://redhat.pagerduty.com/escalation_policies/PA4586M) (SREP) | `#hive-alerts` |
+| `hive-srep` | high (team=srep) | `pagerduty-srep` | [`PA4586M`](https://redhat.pagerduty.com/escalation_policies/PA4586M) (SREP) | — |
+| `hypershift-dns01-monitoring` | critical | `pagerduty-srep` | [`PA4586M`](https://redhat.pagerduty.com/escalation_policies/PA4586M) (SREP) | `#sd-sre-platform-alerts` |
+| `rosa-hcp-log-forwarder` | critical/high + production | `pagerduty-srep` | [`PA4586M`](https://redhat.pagerduty.com/escalation_policies/PA4586M) (SREP) | `#sd-sre-platform-alerts` |
 | `addons-service` | critical + production | `pagerduty-app-sre` | App-SRE | `#sd-mt-sre-alert` |
-| `srep` | critical | `pagerduty-srep` | `PA4586M` (SREP) | `#sd-sre-platform-alerts` |
+| `srep` | critical | `pagerduty-srep` | [`PA4586M`](https://redhat.pagerduty.com/escalation_policies/PA4586M) (SREP) | `#sd-sre-platform-alerts` |
 
 ### RHOBS Alertmanager (MST)
+
+Source: [`alertmanager-routes-mst.secret.yaml`](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/resources/rhobs/production/alertmanager-routes-mst.secret.yaml)
 
 | Tenant | Component | PagerDuty Receiver | Vault Key |
 |--------|-----------|-------------------|-----------|
@@ -47,12 +51,23 @@ The SLSRE team is being dissolved. Most members join two SRE teams on the SREP p
 
 ### Per-Cluster (managed-tenants pagerduty-operator)
 
+Source: [`managed-tenants/addons/rhoams/metadata/production/addon.yaml`](https://gitlab.cee.redhat.com/service/managed-tenants/-/blob/main/addons/rhoams/metadata/production/addon.yaml)
+
 | Addon | Environment | Escalation Policy |
 |-------|------------|-------------------|
-| RHOAM (`managed-api-service`) | production | `PU1EH5A` |
-| RHOAM (`managed-api-service`) | stage | `P8O758S` |
-| RHOAMI (`managed-api-service-internal`) | production | `PU1EH5A` |
-| RHOAMI (`managed-api-service-internal`) | stage | `P8O758S` |
+| RHOAM (`managed-api-service`) | production | [`PU1EH5A`](https://redhat.pagerduty.com/escalation_policies/PU1EH5A) |
+| RHOAM (`managed-api-service`) | stage | [`P8O758S`](https://redhat.pagerduty.com/escalation_policies/P8O758S) |
+| RHOAMI (`managed-api-service-internal`) | production | [`PU1EH5A`](https://redhat.pagerduty.com/escalation_policies/PU1EH5A) |
+| RHOAMI (`managed-api-service-internal`) | stage | [`P8O758S`](https://redhat.pagerduty.com/escalation_policies/P8O758S) |
+
+Additional PD services on `PU1EH5A` (not in managed-tenants config):
+
+| Service | ID | Notes |
+|---------|-----|-------|
+| [CSSRE Pager RHOAM](https://redhat.pagerduty.com/services/PSUAHF2) | `PSUAHF2` | 59 incidents/yr |
+| [CSSRE Pager RHOSAK](https://redhat.pagerduty.com/services/POLZ93D) | `POLZ93D` | 7 incidents/yr |
+| [cs-sre-deadmansnitch](https://redhat.pagerduty.com/services/PC7B4HO) | `PC7B4HO` | DMS heartbeat |
+| [cssre-test-service-only](https://redhat.pagerduty.com/services/P6TDEV6) | `P6TDEV6` | Test service |
 
 ### Orphaned Receivers (defined but no routes)
 
@@ -62,6 +77,8 @@ The SLSRE team is being dissolved. Most members join two SRE teams on the SREP p
 | `slack-sl-sre-alerts` | Slack | `#sd-mt-sre-alert` |
 
 ## OSD Fleet Manager Alert Definitions
+
+Source: [`osd-fleet-manager-production.prometheusrules.yaml.j2`](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/resources/observability/prometheusrules/osd-fleet-manager-production.prometheusrules.yaml.j2)
 
 | Alert | Severity |
 |-------|----------|
@@ -92,11 +109,12 @@ The SLSRE team is being dissolved. Most members join two SRE teams on the SREP p
 - [Addon & Package Operator Alerts](addon-and-package-operator-alerts.md)
 - [RHOAM Per-Cluster Alerts](rhoam-alerts.md)
 - [Team Members & Roles](team-members-and-roles.md)
+- [PagerDuty Incident History](pagerduty-incident-history.md)
 
-## Gap: Historical Alert Data
+## Gaps Remaining
 
-PagerDuty API access is required to pull incident history for the last year. Query these:
-- SREP service filtered by `service: osd-fleet-manager` alerts
-- Escalation policy `PU1EH5A` (RHOAM production)
-- Escalation policy `PGASVAO` (SLSRE — likely empty if truly orphaned)
-- PD services for addon-operator and package-operator (vault keys in `mt-sre/pagerduty`)
+See [PagerDuty Incident History](pagerduty-incident-history.md) for full gap list. Key items:
+- [ ] Per-cluster `managed-api-service-*` incident counts on `PU1EH5A` — 18 services not yet queried
+- [ ] `P8O758S` (rhmi-dev) incident history — stage services
+- [ ] Addon-operator and package-operator PD services — not found via PD search
+- [ ] `PQSWOFV` (MT-SRE) — 404 in PD, needs investigation

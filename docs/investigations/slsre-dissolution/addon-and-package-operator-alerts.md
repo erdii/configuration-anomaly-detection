@@ -1,6 +1,6 @@
 # Addon Operator & Package Operator Alerts
 
-These alerts route through the **RHOBS alertmanager** (`alertmanager-routes-mst.secret.yaml`), not the main observability alertmanager.
+These alerts route through the **RHOBS alertmanager** ([`alertmanager-routes-mst.secret.yaml`](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/resources/rhobs/production/alertmanager-routes-mst.secret.yaml)), not the main observability alertmanager.
 
 ## Routing
 
@@ -15,7 +15,7 @@ Both use routing keys from the `mt-sre/pagerduty` vault namespace (version 5).
 
 ## Receiver Definitions
 
-From `alertmanager-routes-mst.secret.yaml` (lines 16-22):
+From [`alertmanager-routes-mst.secret.yaml`](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/resources/rhobs/production/alertmanager-routes-mst.secret.yaml) (lines 16-22):
 
 ```yaml
 - name: pagerduty-lpsre-addon-operator-prod
@@ -29,7 +29,7 @@ From `alertmanager-routes-mst.secret.yaml` (lines 16-22):
 
 ## Addons Service (centralized alertmanager)
 
-`service: addons-service` and `service: addons` route through the main alertmanager (lines 2142-2166):
+`service: addons-service` and `service: addons` route through the [main alertmanager](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/resources/observability/alertmanager/alertmanager-instance.secret.yaml) (lines 2142-2166):
 
 | Severity | Environment | Receiver | Target |
 |----------|-------------|----------|--------|
