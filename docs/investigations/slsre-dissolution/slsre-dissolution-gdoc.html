@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; line-height: 1.5; color: #202124; }
+  h1 { font-size: 24px; border-bottom: 2px solid #1a73e8; padding-bottom: 8px; }
+  h2 { font-size: 18px; color: #1a73e8; margin-top: 32px; }
+  h3 { font-size: 15px; margin-top: 24px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; }
+  th, td { border: 1px solid #dadce0; padding: 8px 12px; text-align: left; font-size: 13px; }
+  th { background-color: #f1f3f4; font-weight: bold; }
+  tr:nth-child(even) { background-color: #f8f9fa; }
+  .action { background-color: #fce8e6; padding: 2px 6px; border-radius: 3px; font-weight: bold; }
+  .ok { background-color: #e6f4ea; padding: 2px 6px; border-radius: 3px; }
+  .warn { background-color: #fef7e0; padding: 2px 6px; border-radius: 3px; }
+  ul { margin: 8px 0; }
+  li { margin: 4px 0; }
+  a { color: #1a73e8; }
+  .summary-box { background: #e8f0fe; border-left: 4px solid #1a73e8; padding: 12px 16px; margin: 16px 0; }
+  .alert-box { background: #fce8e6; border-left: 4px solid #d93025; padding: 12px 16px; margin: 16px 0; }
+</style>
+</head>
+<body>
+
+<h1>SLSRE Dissolution — Alert Routing Migration Plan</h1>
+
+<p><strong>Date:</strong> 2026-11-05<br>
+<strong>Scope:</strong> PKO/ADO, managed-tenants, ACM/OCM, and other addon alerts<br>
+<strong>Out of scope:</strong> RHOAM per-cluster alerts (handled by RHOAM team via <a href="https://redhat.atlassian.net/browse/MGDAPI-7107">MGDAPI-7107</a>)</p>
+
+<div class="summary-box">
+<strong>TL;DR:</strong> Most SLSRE-paged alerts (OSD FM, Hive, HyperShift) already route to the SREP pager — no change needed. Three areas require action: (1) ACM alerts on the SLSRE escalation policy (1,159 incidents/yr, currently silent), (2) addon-operator and package-operator alerts on RHOBS, and (3) cleanup of orphaned PD receivers and app-interface config.
+</div>
+
+<h2>1. ACM Alerts — Service Lifecycle On-Call (<code>PGASVAO</code>)</h2>
+
+<div class="alert-box">
+<strong>Risk:</strong> 1,159 ACM alerts hit this EP in the last year. They went silent in Sep 2026 — if they recur after SLSRE dissolution, there will be no one on the pager.
+</div>
+
+<p>The SLSRE escalation policy (<a href="https://redhat.pagerduty.com/escalation_policies/PGASVAO">PGASVAO</a> — "Service Lifecycle On-Call") has no alertmanager routes pointing to it, yet its attached PD service (<a href="https://redhat.pagerduty.com/services/PESM5LA">Service Lifecycle SRE</a>) received 1,159 incidents in the past year. All are ACM-related alerts originating from management clusters (likely via RHOBS or a direct PD integration, not the centralized alertmanager).</p>
+
+<h3>Incident Volume by Month</h3>
+
+<table>
+<tr><th>Month</th><th>Incidents</th><th>Notes</th></tr>
+<tr><td>2025-11</td><td>10</td><td></td></tr>
+<tr><td>2025-12</td><td>2</td><td></td></tr>
+<tr><td>2026-01</td><td>1</td><td></td></tr>
+<tr><td>2026-02</td><td>2</td><td></td></tr>
+<tr><td>2026-03</td><td>312</td><td>Spike begins</td></tr>
+<tr><td>2026-04</td><td>171</td><td></td></tr>
+<tr><td>2026-05</td><td>153</td><td></td></tr>
+<tr><td>2026-06</td><td>82</td><td></td></tr>
+<tr><td>2026-07</td><td>202</td><td></td></tr>
+<tr><td>2026-08</td><td>224</td><td></td></tr>
+<tr><td>2026-09</td><td>0</td><td>Silence begins</td></tr>
+<tr><td>2026-10</td><td>0</td><td></td></tr>
+</table>
+
+<h3>Top Alert Titles</h3>
+
+<table>
+<tr><th>Count</th><th>Alert</th></tr>
+<tr><td>104</td><td><code>[SLSRE] ACMPolicyPodContainerRestarting</code> (config-policy-controller)</td></tr>
+<tr><td>35</td><td><code>[SLSRE] ACMPolicyPodContainerRestarting</code> (governance-policy-framework-addon)</td></tr>
+<tr><td>33</td><td><code>[SLSRE] ACMPolicyPodContainerRestarting</code> (config-policy-controller, other MCs)</td></tr>
+<tr><td>22</td><td><code>[SLSRE] ACMHostingClusterAddOnPlacementScoreFailed</code></td></tr>
+<tr><td>19</td><td><code>OSD Fleet Manager Production Provision Shard has no MC</code></td></tr>
+</table>
+
+<p>The alerts are ACM policy controller crashes and addon placement score failures on HyperShift management clusters (<code>hs-mc-*</code>). The OSD FM "Provision Shard has no MC" alert also appeared here — likely a mis-routed alert that should only go to the SREP pager.</p>
+
+<h3>Actions</h3>
+<ul>
+<li><span class="action">ACTION</span> Investigate why ACM alerts went silent in Sep 2026 (fixed? silenced? integration disconnected?)</li>
+<li><span class="action">ACTION</span> Decide new owner for ACM alerts — migrate to ACM team EP or fold into SREP</li>
+<li><span class="action">ACTION</span> Do <strong>not</strong> remove <code>PGASVAO</code> until silence is confirmed permanent</li>
+</ul>
+
+<h2>2. Addon Operator & Package Operator (PKO/ADO)</h2>
+
+<p>These alerts route through the <strong>RHOBS alertmanager</strong> (<a href="https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/resources/rhobs/production/alertmanager-routes-mst.secret.yaml">alertmanager-routes-mst.secret.yaml</a>), separate from the centralized observability alertmanager. Both share RHOBS tenant <code>770c1124-6ae8-4324-a9d4-9ce08590094b</code>.</p>
+
+<table>
+<tr><th>Component</th><th>PD Receiver</th><th>Vault Key</th><th>Incident Data</th></tr>
+<tr><td>addon-operator</td><td><code>pagerduty-lpsre-addon-operator-prod</code></td><td><code>mt-sre/pagerduty:addon_operator_integration_key</code></td><td>Unknown — PD service not found</td></tr>
+<tr><td>package-operator</td><td><code>pagerduty-slsre-package-operator-prod</code></td><td><code>mt-sre/pagerduty:package_operator_integration_key</code></td><td>Unknown — PD service not found</td></tr>
+</table>
+
+<p>The PD services for both operators could not be located via PD search — they may use different names, be under a different team, or the integration keys may point to services we haven't identified yet.</p>
+
+<p>Additionally, <code>addons-service</code> alerts in the centralized alertmanager route critical production alerts to <code>pagerduty-app-sre</code> (App-SRE pager), <strong>not</strong> to SLSRE or SREP.</p>
+
+<h3>Actions</h3>
+<ul>
+<li><span class="action">ACTION</span> Locate PD services for addon-operator and package-operator (check vault keys or PD integrations)</li>
+<li><span class="action">ACTION</span> Decide new owner for <code>pagerduty-slsre-package-operator-prod</code> — rename receiver and update EP</li>
+<li><span class="action">ACTION</span> Decide new owner for <code>pagerduty-lpsre-addon-operator-prod</code> — same</li>
+<li><span class="action">ACTION</span> Update vault keys in <code>mt-sre/pagerduty</code> if escalation policies change</li>
+</ul>
+
+<h2>3. Managed-Tenants Infrastructure</h2>
+
+<p>The <code>managed-tenants</code> repo (<a href="https://gitlab.cee.redhat.com/service/managed-tenants/">GitLab</a>) defines per-cluster PagerDuty integrations for addons via the pagerduty-operator. The RHOAM/RHOAMI addon definitions reference SLSRE-managed escalation policies — those are covered by the RHOAM team via <a href="https://redhat.atlassian.net/browse/MGDAPI-7107">MGDAPI-7107</a>.</p>
+
+<p>What remains for us:</p>
+
+<table>
+<tr><th>Item</th><th>Location</th><th>Status</th></tr>
+<tr><td><code>saas-managed-tenants-approver</code> role</td><td><a href="https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/data/teams/lp-sre/roles/saas-managed-tenants-approver.yml">app-interface</a></td><td><span class="action">Needs transfer</span> — grants self-service for addons, PD integrations, DMS, package-operator</td></tr>
+<tr><td>MT-SRE EP (<code>PQSWOFV</code>)</td><td>Referenced in app-interface as RHMI next-escalation</td><td><span class="action">404 in PD</span> — deleted or ID wrong</td></tr>
+</table>
+
+<h3>Actions</h3>
+<ul>
+<li><span class="action">ACTION</span> Transfer <code>saas-managed-tenants-approver</code> role to the appropriate new team</li>
+<li><span class="action">ACTION</span> Investigate <code>PQSWOFV</code> — was it deleted, renamed, or is the ID wrong in app-interface?</li>
+</ul>
+
+<h2>4. OSD Fleet Manager, Hive, HyperShift, ROSA-HCP Log Forwarder</h2>
+
+<div class="summary-box">
+<strong>No routing change needed.</strong> All these services already page the SREP escalation policy (<a href="https://redhat.pagerduty.com/escalation_policies/PA4586M">PA4586M</a>). SLSRE members joining SREP will continue to see these alerts.
+</div>
+
+<table>
+<tr><th>Service</th><th>Severity</th><th>Routes To</th><th>Incidents/yr</th></tr>
+<tr><td><code>osd-fleet-manager</code></td><td>critical + prod</td><td>SREP pager (<code>PA4586M</code>)</td><td rowspan="4">1,750 total on PA4586M</td></tr>
+<tr><td><code>hive-srep</code></td><td>critical/high (team=srep)</td><td>SREP pager (<code>PA4586M</code>)</td></tr>
+<tr><td><code>hypershift-dns01-monitoring</code></td><td>critical</td><td>SREP pager (<code>PA4586M</code>)</td></tr>
+<tr><td><code>rosa-hcp-log-forwarder</code></td><td>critical/high + prod</td><td>SREP pager (<code>PA4586M</code>)</td></tr>
+</table>
+
+<h3>Top SREP Alert Patterns (PA4586M)</h3>
+
+<table>
+<tr><th>Count</th><th>Alert</th></tr>
+<tr><td>56</td><td><code>HCPProvisioningErrorBudgetBurn12hto1w</code></td></tr>
+<tr><td>26</td><td><code>HCPLogForwarderCloudWatchDeliveryErrorBudgetBurning</code></td></tr>
+<tr><td>25</td><td><code>HCPLogForwarderS3DeliveryErrorBudgetBurning</code></td></tr>
+<tr><td>18</td><td><code>[CAD Investigated] ClusterProvisioningDelay</code></td></tr>
+<tr><td>16</td><td><code>HCPNodepoolUpgradeDelay</code></td></tr>
+</table>
+
+<h2>5. Cleanup — Orphaned Receivers & Config</h2>
+
+<table>
+<tr><th>Item</th><th>Location</th><th>Status</th></tr>
+<tr><td><code>pagerduty-slsre</code> receiver</td><td><a href="https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/resources/observability/alertmanager/alertmanager-instance.secret.yaml">alertmanager-instance.secret.yaml</a> (line 6247)</td><td>Defined, zero routes — orphaned</td></tr>
+<tr><td><code>slack-sl-sre-alerts</code> receiver</td><td>Same file (line 5978)</td><td>Defined, zero routes — orphaned</td></tr>
+<tr><td><code>sl-sre-escalation-policy.yml</code></td><td><a href="https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/data/dependencies/pagerduty/sl-sre-escalation-policy.yml">app-interface</a></td><td>Remove after ACM migration confirmed</td></tr>
+<tr><td><code>general.yaml</code> (sl-sre-general)</td><td><a href="https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/data/teams/lp-sre/escalation-policies/general.yaml">app-interface</a></td><td>Remove or update</td></tr>
+<tr><td>SLSRE AWS groups</td><td><code>SLSRE-admin</code> (hypershift-dns01), <code>SLSRE-viewer</code> (svc-transit-*)</td><td>Rename or remove</td></tr>
+<tr><td>Slack user groups</td><td><code>@team-rosa-sl</code>, regional variants</td><td>Update for new team structure</td></tr>
+<tr><td><code>service-lifecycle-sre</code> role</td><td><a href="https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/data/teams/lp-sre/roles/service-lifecycle-sre.yml">app-interface</a></td><td>Remove from users who moved to SREP</td></tr>
+</table>
+
+<h2>6. PagerDuty Schedule Impact</h2>
+
+<p>The <a href="https://redhat.pagerduty.com/schedules/P8N1PPP">Layered Products Primary</a> schedule (<code>P8N1PPP</code>) is shared across 6 escalation policies. Removing <code>PGASVAO</code> won't affect the schedule — the other 5 EPs still use it:</p>
+
+<table>
+<tr><th>Escalation Policy</th><th>ID</th></tr>
+<tr><td>[LP-SRE] RHOAM</td><td><code>PU1EH5A</code></td></tr>
+<tr><td>[LP-SRE] Layered Products Misc</td><td><code>PW2VRAD</code></td></tr>
+<tr><td>RHACS Cloud Services</td><td><code>PRYVS4S</code></td></tr>
+<tr><td>Layered Products Oncall</td><td><code>PB0QERV</code></td></tr>
+<tr><td>[LP-SRE] ACM - Hybrid</td><td><code>PNFURGS</code></td></tr>
+<tr><td>Service Lifecycle On-Call <em>(to be removed)</em></td><td><code>PGASVAO</code></td></tr>
+</table>
+
+<h2>Summary of All Actions</h2>
+
+<table>
+<tr><th>#</th><th>Area</th><th>Action</th><th>Priority</th><th>Dependency</th></tr>
+<tr><td>1</td><td>ACM</td><td>Investigate Sep 2026 ACM alert silence on <code>PGASVAO</code></td><td>High</td><td>Blocks #2, #3</td></tr>
+<tr><td>2</td><td>ACM</td><td>Decide new owner for ACM alerts — migrate EP or fold into SREP</td><td>High</td><td>After #1</td></tr>
+<tr><td>3</td><td>ACM</td><td>Remove <code>PGASVAO</code> + app-interface config only after migration confirmed</td><td>Medium</td><td>After #2</td></tr>
+<tr><td>4</td><td>PKO/ADO</td><td>Locate PD services for addon-operator and package-operator</td><td>High</td><td>None</td></tr>
+<tr><td>5</td><td>PKO/ADO</td><td>Decide new owners for <code>pagerduty-slsre-package-operator-prod</code> and <code>pagerduty-lpsre-addon-operator-prod</code></td><td>High</td><td>After #4</td></tr>
+<tr><td>6</td><td>Managed-tenants</td><td>Transfer <code>saas-managed-tenants-approver</code> role</td><td>Medium</td><td>None</td></tr>
+<tr><td>7</td><td>Managed-tenants</td><td>Investigate <code>PQSWOFV</code> (MT-SRE EP) — 404 in PD</td><td>Low</td><td>None</td></tr>
+<tr><td>8</td><td>Cleanup</td><td>Remove orphaned <code>pagerduty-slsre</code> and <code>slack-sl-sre-alerts</code> receivers</td><td>Low</td><td>None</td></tr>
+<tr><td>9</td><td>Cleanup</td><td>Remove <code>service-lifecycle-sre</code> role from migrated sd-sre users</td><td>Low</td><td>None</td></tr>
+<tr><td>10</td><td>Cleanup</td><td>Rename/remove SLSRE AWS groups and update Slack user groups</td><td>Low</td><td>None</td></tr>
+</table>
+
+<h2>Data Gaps</h2>
+
+<table>
+<tr><th>Gap</th><th>Impact</th></tr>
+<tr><td>Addon-operator / package-operator PD services not located</td><td>Cannot assess incident volume or current routing</td></tr>
+<tr><td><code>PQSWOFV</code> (MT-SRE EP) returns 404</td><td>Cannot verify if this EP is still referenced anywhere active</td></tr>
+<tr><td><code>P8O758S</code> (rhmi-dev) incident history not collected</td><td>Stage environment — low impact</td></tr>
+</table>
+
+</body>
+</html>
